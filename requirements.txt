@@ -1,0 +1,24 @@
+# Foundation & Config
+pydantic>=2.6
+pydantic-settings>=2.2
+python-dotenv>=1.0
+
+# LLM + API + web search
+openai>=1.40
+fastapi>=0.110
+uvicorn[standard]>=0.29
+httpx>=0.27
+
+# Concurrency uses stdlib ThreadPoolExecutor
+
+# Memory & Embeddings
+# langgraph>=0.2  # add if/when graph-based re-planning is introduced
+# langchain-core>=0.3
+# No new deps: the vector store is pure-Python (JSON persist + cosine) and
+# embeddings reuse the OpenAI SDK already required above, with an offline hashing
+# fallback. Swap in chromadb here only if the corpus outgrows an in-memory scan.
+# chromadb>=0.5
+# --- dev ---
+# pytest>=8.0
+# mypy>=1.9
+# ruff>=0.4

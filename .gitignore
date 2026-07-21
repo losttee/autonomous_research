@@ -1,0 +1,27 @@
+# Secrets
+.env
+
+# Python
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Data / artifacts
+data/
+evaluation/results/*
+!evaluation/results/.gitkeep
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/

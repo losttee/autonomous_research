@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "research-agent"
+version = "0.1.0"
+description = "Autonomous Research & Decision Agent — multi-layer deep research agent with grounded citations"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "python-dotenv>=1.0",
+    "openai>=1.40",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+# Keep in sync with requirements.txt — that file is the install source of truth.
+# Not listed there (evaluated, not adopted): anthropic, chromadb, langgraph,
+# sse-starlette (progress streaming uses starlette's plain StreamingResponse).
+dev = [
+    "pytest>=8.0",
+    "mypy>=1.9",
+    "ruff>=0.4",
+]
+
+[tool.setuptools.packages.find]
+include = ["research_agent*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+plugins = ["pydantic.mypy"]
+warn_unused_ignores = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
