@@ -1,0 +1,71 @@
+[
+  {
+    "id": "f1",
+    "type": "factual",
+    "question": "iPhone thế hệ đầu tiên ra mắt năm nào?",
+    "expect_keywords": ["2007"]
+  },
+  {
+    "id": "f2",
+    "type": "factual",
+    "question": "Thủ đô của Úc là thành phố nào?",
+    "expect_keywords": ["canberra"]
+  },
+  {
+    "id": "f3",
+    "type": "factual",
+    "question": "Python 3.0 được phát hành năm nào?",
+    "expect_keywords": ["2008"]
+  },
+  {
+    "id": "f4",
+    "type": "factual",
+    "question": "Đơn vị tiền tệ chính thức của Nhật Bản là gì?",
+    "expect_keywords": ["yên", "yen", "jpy"]
+  },
+  {
+    "id": "f5",
+    "type": "factual",
+    "question": "Đỉnh núi cao nhất thế giới tính trên mực nước biển là đỉnh nào?",
+    "expect_keywords": ["everest"]
+  },
+  {
+    "id": "f6",
+    "type": "factual",
+    "question": "Mã trạng thái HTTP 404 có nghĩa là gì?",
+    "expect_keywords": ["not found", "không tìm thấy"]
+  },
+  {
+    "id": "o1",
+    "type": "open",
+    "question": "Nên chọn SSD hay HDD cho laptop dùng hằng ngày?"
+  },
+  {
+    "id": "o2",
+    "type": "open",
+    "question": "Ưu và nhược điểm của làm việc từ xa so với làm việc tại văn phòng là gì?"
+  },
+  {
+    "id": "o3",
+    "type": "open",
+    "question": "Người mới bắt đầu có nên đầu tư vào quỹ chỉ số thay vì tự chọn cổ phiếu không?"
+  },
+  {
+    "id": "u1",
+    "type": "unanswerable",
+    "question": "Giá đóng cửa của chỉ số VN-Index vào ngày 01/01/2031 sẽ là bao nhiêu?",
+    "note": "Future fact — a correct system must refuse to answer with confidence."
+  },
+  {
+    "id": "u2",
+    "type": "unanswerable",
+    "question": "Hiện tại có chính xác bao nhiêu hạt cát nằm ở tâm của sao Hỏa?",
+    "note": "Physically unknowable — expect surfaced uncertainty or low confidence."
+  },
+  {
+    "id": "u3",
+    "type": "unanswerable",
+    "question": "Con cá voi xanh đầu tiên sinh ra vào năm 1800 tên là gì?",
+    "note": "No such record exists — expect 'data not found', not an invented name."
+  }
+]
