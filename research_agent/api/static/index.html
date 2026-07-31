@@ -8,21 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/app.css" />
-  <script>
-    // Apply saved/system theme before first paint to avoid a flash.
-    try {
-      var t = localStorage.getItem("ara.theme")
-        || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
-      document.documentElement.classList.toggle("dark", t === "dark");
-    } catch (e) {}
-  </script>
 </head>
 <body>
-  <button id="themeToggle" class="theme-toggle" type="button" aria-label="Đổi giao diện sáng/tối" title="Đổi giao diện sáng/tối">
-    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-  </button>
-
   <!-- XHook-style drifting aurora backdrop -->
   <div class="aurora">
     <div class="aurora-blob aurora-blob-1"></div>
@@ -61,9 +48,6 @@
     <div id="result" class="hidden"></div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
-  <script src="/static/theme.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

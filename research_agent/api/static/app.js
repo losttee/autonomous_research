@@ -17,17 +17,6 @@ function bandClass(band) {
 
 const pct = (x) => `${Math.round((x || 0) * 100)}%`;
 
-// Report bodies come from an LLM and usually carry markdown. marked +
-// DOMPurify (loaded from CDN in index.html) render it safely; if either
-// library failed to load we fall back to escaped plain text.
-if (window.marked) marked.use({ gfm: true, breaks: true });
-function rich(text) {
-  if (window.marked && window.DOMPurify) {
-    return DOMPurify.sanitize(marked.parse(String(text ?? "")));
-  }
-  return `<div class="plain">${esc(text)}</div>`;
-}
-
 function renderSources(sources) {
   if (!sources || !sources.length) return "";
   const items = sources.map((s) => {
@@ -56,7 +45,7 @@ function render(data) {
 
   parts.push(`<div class="card result-card">
     <h2>Khuyến nghị</h2>
-    <div class="rec md">${rich(r.recommendation)}</div>
+    <div class="rec">${esc(r.recommendation)}</div>
   </div>`);
 
   if (r.sections && r.sections.length) {
@@ -65,7 +54,7 @@ function render(data) {
         <h3>${esc(s.heading)}</h3>
         <span class="badge ${bandClass(s.confidence_band)}">${esc(s.confidence_band)}</span>
       </div>
-      <div class="body-text md">${rich(s.body)}</div>`).join("");
+      <div class="body-text">${esc(s.body)}</div>`).join("");
     parts.push(`<div class="card result-card"><h2>Phân tích</h2>${secs}</div>`);
   }
 

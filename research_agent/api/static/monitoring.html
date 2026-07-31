@@ -8,14 +8,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/app.css" />
-  <script>
-    // Apply saved/system theme before first paint to avoid a flash.
-    try {
-      var t = localStorage.getItem("ara.theme")
-        || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
-      document.documentElement.classList.toggle("dark", t === "dark");
-    } catch (e) {}
-  </script>
   <style>
     .mon-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
     .back-link { color: var(--fg-faint); text-decoration: none; font-size: 13px; }
@@ -38,11 +30,6 @@
   </style>
 </head>
 <body>
-  <button id="themeToggle" class="theme-toggle" type="button" aria-label="Đổi giao diện sáng/tối" title="Đổi giao diện sáng/tối">
-    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-  </button>
-
   <div class="aurora">
     <div class="aurora-blob aurora-blob-1"></div>
     <div class="aurora-blob aurora-blob-2"></div>
@@ -58,7 +45,6 @@
 
     <div id="content" class="hidden" style="display:flex;flex-direction:column;gap:16px;">
       <div class="card result-card"><div class="metrics" id="totals"></div></div>
-      <div class="card result-card"><h2>Chi phí theo lần chạy</h2><div id="chart"></div></div>
       <div class="card result-card"><h2>Theo tầng pipeline</h2><div id="steps"></div></div>
       <div class="card result-card"><h2>Lần chạy gần đây</h2><div id="runs"></div></div>
       <div class="refresh-bar">
@@ -72,7 +58,6 @@
     <div id="monStatus" class="status"><span class="spinner"></span> Đang tải số liệu…</div>
   </div>
 
-  <script src="/static/theme.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -83,25 +68,8 @@
       return `<div class="metric"><b>${value}</b><span>${label}</span></div>`;
     }
 
-    function costBars(runs) {
-      if (!runs.length) return `<div class="empty">Chưa có dữ liệu.</div>`;
-      const vals = runs.map((r) => r.cost_usd || 0);
-      const max = Math.max(...vals, 1e-9);
-      const W = 100, H = 100, bw = W / vals.length;
-      const bars = vals.map((v, i) => {
-        const h = Math.max((v / max) * (H - 6), 0.8);
-        return `<rect x="${(i * bw + bw * 0.15).toFixed(2)}" y="${(H - h).toFixed(2)}"
-          width="${(bw * 0.7).toFixed(2)}" height="${h.toFixed(2)}" rx="0.5">
-          <title>${esc(runs[i].report_id)} — $${v.toFixed(4)}</title></rect>`;
-      }).join("");
-      return `<div class="bars"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
-        role="img" aria-label="Chi phí theo từng lần chạy">${bars}</svg>
-        <div class="bars-note">Mỗi cột là một lần chạy (mới nhất bên trái); chiều cao theo chi phí, di chuột để xem số.</div></div>`;
-    }
-
     function render(data) {
       const t = data.totals;
-      $("chart").innerHTML = costBars(data.runs);
       $("totals").innerHTML =
         metric(data.run_count, "Lần chạy") +
         metric(`$${data.avg_run_cost_usd.toFixed(4)}`, "Chi phí TB / lần") +
