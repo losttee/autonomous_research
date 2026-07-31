@@ -68,16 +68,46 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* --- aurora backdrop (XHook loading screen aesthetic) --- */
-.aurora { position: fixed; inset: 0; overflow: hidden; z-index: -1; pointer-events: none; }
-.aurora-blob { position: absolute; border-radius: 9999px; filter: blur(90px); opacity: 0.20; will-change: transform; }
-:root.dark .aurora-blob { opacity: 0.32; }
-.aurora-blob-1 { top: -18%; left: -8%; width: 55vw; height: 55vw; background: radial-gradient(circle at 30% 30%, oklch(0.62 0.19 275), transparent 70%); animation: drift1 18s ease-in-out infinite alternate; }
-.aurora-blob-2 { top: 8%; right: -12%; width: 50vw; height: 50vw; background: radial-gradient(circle at 60% 40%, oklch(0.68 0.16 255), transparent 70%); animation: drift2 22s ease-in-out infinite alternate; }
-.aurora-blob-3 { bottom: -20%; left: 25%; width: 45vw; height: 45vw; background: radial-gradient(circle at 50% 50%, oklch(0.55 0.222 275), transparent 70%); animation: drift3 26s ease-in-out infinite alternate; }
-@keyframes drift1 { to { transform: translate(12vw, 8vh) scale(1.15); } }
-@keyframes drift2 { from { transform: scale(1.1); } to { transform: translate(-10vw, 10vh) scale(0.95); } }
-@keyframes drift3 { from { transform: scale(0.95); } to { transform: translate(8vw, -10vh) scale(1.2); } }
+/* --- aurora backdrop (hardware-accelerated, zero-lag) --- */
+.aurora {
+  position: fixed; inset: 0; overflow: hidden; z-index: -1; pointer-events: none;
+  contain: strict;
+  transform: translate3d(0, 0, 0);
+}
+.aurora-blob {
+  position: absolute; border-radius: 9999px;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  opacity: 0.35;
+}
+:root.dark .aurora-blob { opacity: 0.45; }
+.aurora-blob-1 {
+  top: -15%; left: -10%; width: 55vw; height: 55vw;
+  background: radial-gradient(circle at center, oklch(0.62 0.19 275 / 0.85) 0%, oklch(0.62 0.19 275 / 0.3) 40%, transparent 70%);
+  animation: drift1 28s ease-in-out infinite alternate;
+}
+.aurora-blob-2 {
+  top: 10%; right: -15%; width: 50vw; height: 50vw;
+  background: radial-gradient(circle at center, oklch(0.68 0.16 255 / 0.85) 0%, oklch(0.68 0.16 255 / 0.3) 40%, transparent 70%);
+  animation: drift2 32s ease-in-out infinite alternate;
+}
+.aurora-blob-3 {
+  bottom: -15%; left: 20%; width: 45vw; height: 45vw;
+  background: radial-gradient(circle at center, oklch(0.55 0.222 275 / 0.85) 0%, oklch(0.55 0.222 275 / 0.3) 40%, transparent 70%);
+  animation: drift3 36s ease-in-out infinite alternate;
+}
+@keyframes drift1 {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(8vw, 6vh, 0); }
+}
+@keyframes drift2 {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-8vw, 8vh, 0); }
+}
+@keyframes drift3 {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(6vw, -8vh, 0); }
+}
 
 .wrap { max-width: 780px; margin: 0 auto; padding: 108px 20px 72px; }
 
@@ -86,9 +116,11 @@ body {
   position: fixed; top: 0; left: 0; right: 0; z-index: 20;
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 22px;
-  background: color-mix(in oklch, var(--background) 72%, transparent);
+  background: color-mix(in oklch, var(--background) 82%, transparent);
   border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
-  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transform: translateZ(0);
 }
 .brand {
   display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
@@ -117,10 +149,12 @@ html:not(.dark) .icon-sun { display: none; }
 .badge-pill {
   display: inline-flex; align-items: center; gap: 8px;
   font-size: 12.5px; font-weight: 500; color: var(--fg-subtle);
-  background: color-mix(in oklch, var(--card) 70%, transparent);
+  background: color-mix(in oklch, var(--card) 75%, transparent);
   border: 1px solid var(--border); border-radius: 999px;
   padding: 6px 14px; margin-bottom: 22px;
-  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  transform: translateZ(0);
 }
 .badge-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--constructive); box-shadow: 0 0 0 3px color-mix(in oklch, var(--constructive) 25%, transparent); }
 .mon-link { display: inline-block; margin-left: 10px; font-size: 12.5px; color: var(--fg-faint); text-decoration: none; transition: color 150ms var(--ease-standard); }
@@ -136,11 +170,13 @@ h1 {
 
 /* --- card / composer --- */
 .card {
-  background: color-mix(in oklch, var(--card) 88%, transparent);
+  background: color-mix(in oklch, var(--card) 92%, transparent);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 18px;
-  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transform: translateZ(0);
 }
 .composer { box-shadow: 0 8px 40px -12px var(--shadow-card); }
 .composer textarea {
@@ -192,9 +228,12 @@ kbd {
 .status {
   display: flex; align-items: center; gap: 12px;
   margin-top: 24px; padding: 16px 18px;
-  background: color-mix(in oklch, var(--card) 88%, transparent);
+  background: color-mix(in oklch, var(--card) 92%, transparent);
   border: 1px solid var(--border); border-radius: var(--radius-lg);
-  color: var(--fg-subtle); font-size: 14px; backdrop-filter: blur(12px);
+  color: var(--fg-subtle); font-size: 14px;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transform: translateZ(0);
 }
 .status.error { border-color: color-mix(in oklch, var(--destructive) 55%, var(--border)); color: var(--destructive); }
 .spinner {
@@ -297,6 +336,6 @@ li { margin: 5px 0; }
 .bars-note { margin-top: 8px; font-size: 12px; color: var(--fg-faint); }
 
 @media (prefers-reduced-motion: reduce) {
-  .aurora-blob, .spinner { animation: none; }
-  .result-card { animation: none; }
+  .aurora-blob, .spinner { animation: none !important; }
+  .result-card { animation: none !important; }
 }

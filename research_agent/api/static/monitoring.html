@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/app.css" />
+  <link rel="stylesheet" href="/static/app.css?v=2.1" />
   <script>
     // Apply saved/system theme before first paint to avoid a flash.
     try {
@@ -27,7 +27,7 @@
     .refresh-bar { display: flex; align-items: center; gap: 10px; margin-top: 16px; font-size: 12.5px; color: var(--fg-faint); }
     .refresh-bar button {
       background: color-mix(in oklch, var(--card) 60%, transparent);
-      border: 1px solid var(--border); border-radius: 999px;
+      border: 1px solid var(--border); border-radius: 9999px;
       color: var(--fg-subtle); font-family: inherit; font-size: 12.5px;
       padding: 5px 12px; cursor: pointer;
     }
@@ -76,7 +76,7 @@
     <footer class="footer">Aggregated from the pipeline's structured logs · refreshes every 10 seconds.</footer>
   </div>
 
-  <script src="/static/theme.js"></script>
+  <script src="/static/theme.js?v=2.1"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -142,11 +142,18 @@
       $("updated").textContent = "updated " + new Date().toLocaleTimeString();
     }
 
+    let lastPayload = "";
     async function load() {
       try {
         const res = await fetch("/metrics");
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        render(await res.json());
+        const text = await res.text();
+        if (text === lastPayload) {
+          $("updated").textContent = "updated " + new Date().toLocaleTimeString();
+          return;
+        }
+        lastPayload = text;
+        render(JSON.parse(text));
       } catch (err) {
         $("monStatus").className = "status error";
         $("monStatus").textContent = `Couldn't load metrics: ${err.message}`;
