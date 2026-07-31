@@ -1,17 +1,22 @@
 <!DOCTYPE html>
-<html lang="vi" class="dark">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Monitoring — Autonomous Research Agent</title>
+  <title>Metrics — Autonomous Research</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/app.css" />
+  <script>
+    // Apply saved/system theme before first paint to avoid a flash.
+    try {
+      var t = localStorage.getItem("ara.theme")
+        || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+      document.documentElement.classList.toggle("dark", t === "dark");
+    } catch (e) {}
+  </script>
   <style>
-    .mon-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-    .back-link { color: var(--fg-faint); text-decoration: none; font-size: 13px; }
-    .back-link:hover { color: var(--fg-strong); }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: left; }
     th { color: var(--fg-faint); font-weight: 500; font-size: 12px; }
@@ -30,6 +35,17 @@
   </style>
 </head>
 <body>
+  <nav class="topbar">
+    <a class="brand" href="/">Autonomous Research<span class="brand-tag">beta</span></a>
+    <div class="topbar-nav">
+      <a class="mon-link" href="/">Ask a question</a>
+      <button id="themeToggle" class="theme-toggle" type="button" aria-label="Toggle light / dark theme" title="Toggle light / dark theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+    </div>
+  </nav>
+
   <div class="aurora">
     <div class="aurora-blob aurora-blob-1"></div>
     <div class="aurora-blob aurora-blob-2"></div>
@@ -39,25 +55,28 @@
   <div class="wrap">
     <header class="hero">
       <div class="badge-pill"><span class="dot"></span> Monitoring</div>
-      <h1>Chi phí <span class="grad">&amp; hiệu năng</span></h1>
-      <p class="lead">Tổng hợp từ log có cấu trúc của pipeline — mỗi bước (plan, search, verify, synthesize) đều được đo token, độ trễ và chi phí.</p>
+      <h1>Cost &amp; <span class="grad">performance</span></h1>
+      <p class="lead">Every pipeline stage is measured straight from the structured logs — tokens, latency and cost for planning, search, verification and synthesis.</p>
     </header>
 
     <div id="content" class="hidden" style="display:flex;flex-direction:column;gap:16px;">
       <div class="card result-card"><div class="metrics" id="totals"></div></div>
-      <div class="card result-card"><h2>Theo tầng pipeline</h2><div id="steps"></div></div>
-      <div class="card result-card"><h2>Lần chạy gần đây</h2><div id="runs"></div></div>
+      <div class="card result-card"><h2>Cost per run</h2><div id="chart"></div></div>
+      <div class="card result-card"><h2>By pipeline stage</h2><div id="steps"></div></div>
+      <div class="card result-card"><h2>Recent runs</h2><div id="runs"></div></div>
       <div class="refresh-bar">
-        <button id="refresh">Làm mới</button>
-        <label><input type="checkbox" id="autorefresh" checked /> tự động mỗi 10 giây</label>
+        <button id="refresh">Refresh</button>
+        <label><input type="checkbox" id="autorefresh" checked /> auto-refresh every 10s</label>
         <span id="updated"></span>
-        <a class="back-link" href="/" style="margin-left:auto;">← Quay lại trang hỏi đáp</a>
       </div>
     </div>
 
-    <div id="monStatus" class="status"><span class="spinner"></span> Đang tải số liệu…</div>
+    <div id="monStatus" class="status"><span class="spinner"></span> Loading metrics…</div>
+
+    <footer class="footer">Aggregated from the pipeline's structured logs · refreshes every 10 seconds.</footer>
   </div>
 
+  <script src="/static/theme.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -68,42 +87,59 @@
       return `<div class="metric"><b>${value}</b><span>${label}</span></div>`;
     }
 
+    function costBars(runs) {
+      if (!runs.length) return `<div class="empty">Nothing logged yet.</div>`;
+      const vals = runs.map((r) => r.cost_usd || 0);
+      const max = Math.max(...vals, 1e-9);
+      const W = 100, H = 100, bw = W / vals.length;
+      const bars = vals.map((v, i) => {
+        const h = Math.max((v / max) * (H - 6), 0.8);
+        return `<rect x="${(i * bw + bw * 0.15).toFixed(2)}" y="${(H - h).toFixed(2)}"
+          width="${(bw * 0.7).toFixed(2)}" height="${h.toFixed(2)}" rx="0.5">
+          <title>${esc(runs[i].report_id)} — $${v.toFixed(4)}</title></rect>`;
+      }).join("");
+      return `<div class="bars"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
+        role="img" aria-label="Cost per run">${bars}</svg>
+        <div class="bars-note">One bar per run, newest first. Height = cost — hover for exact numbers.</div></div>`;
+    }
+
     function render(data) {
       const t = data.totals;
+      $("chart").innerHTML = costBars(data.runs);
       $("totals").innerHTML =
-        metric(data.run_count, "Lần chạy") +
-        metric(`$${data.avg_run_cost_usd.toFixed(4)}`, "Chi phí TB / lần") +
-        metric(`${(data.avg_run_latency_ms / 1000).toFixed(1)}s`, "Thời gian TB / lần") +
-        metric(t.tokens.toLocaleString(), "Tổng token") +
-        metric(`$${t.cost_usd.toFixed(4)}`, "Tổng chi phí") +
-        metric(t.budget_exceeded, "Lần chạm trần ngân sách");
+        metric(data.run_count, "Runs") +
+        metric(`$${data.avg_run_cost_usd.toFixed(4)}`, "Avg cost / run") +
+        metric(`${(data.avg_run_latency_ms / 1000).toFixed(1)}s`, "Avg time / run") +
+        metric(t.tokens.toLocaleString(), "Total tokens") +
+        metric(`$${t.cost_usd.toFixed(4)}`, "Total cost") +
+        metric(t.budget_exceeded, "Budget caps hit");
 
       $("steps").innerHTML = data.by_step.length
-        ? `<table><tr><th>Bước</th><th class="num">Số lần</th><th class="num">Độ trễ TB</th>
-           <th class="num">Token</th><th class="num">Chi phí</th></tr>
+        ? `<table><tr><th>Stage</th><th class="num">Runs</th><th class="num">Avg latency</th>
+           <th class="num">Tokens</th><th class="num">Cost</th></tr>
            ${data.by_step.map((s) => `<tr>
              <td>${esc(s.step)}</td><td class="num">${s.count}</td>
              <td class="num">${s.avg_latency_ms} ms</td>
              <td class="num">${s.tokens.toLocaleString()}</td>
              <td class="num">$${s.cost_usd.toFixed(4)}</td></tr>`).join("")}</table>`
-        : `<div class="empty">Chưa có bước nào được ghi.</div>`;
+        : `<div class="empty">Nothing logged yet.</div>`;
 
       $("runs").innerHTML = data.runs.length
-        ? `<table><tr><th>Report</th><th class="num">Thời gian</th><th class="num">Chi phí</th>
-           <th class="num">Mục</th><th class="num">Nguồn</th><th>Khác</th></tr>
+        ? `<table><tr><th>Report</th><th class="num">Time</th><th class="num">Cost</th>
+           <th class="num">Sections</th><th class="num">Sources</th><th>Notes</th></tr>
            ${data.runs.map((r) => `<tr>
              <td>${esc(r.report_id)}</td>
              <td class="num">${(r.latency_ms / 1000).toFixed(1)}s</td>
              <td class="num">$${r.cost_usd.toFixed(4)}</td>
              <td class="num">${r.sections ?? "-"}</td>
              <td class="num">${r.sources ?? "-"}</td>
-             <td>${r.recalled ? '<span class="mem-tag">từ bộ nhớ</span>' : ""}${r.revision ? `<span class="mem-tag">replan ×${r.revision}</span>` : ""}</td>
+             <td>${r.recalled ? '<span class="mem-tag">from memory</span>' : ""}${r.revision ? `<span class="mem-tag">replan ×${r.revision}</span>` : ""}</td>
            </tr>`).join("")}</table>`
-        : `<div class="empty">Chưa có lần chạy nào. Đặt một câu hỏi ở trang chủ rồi quay lại đây.</div>`;
+        : `<div class="empty">No runs yet. Ask a question on the home page, then come back.</div>`;
 
       $("content").classList.remove("hidden");
       $("monStatus").classList.add("hidden");
-      $("updated").textContent = "cập nhật " + new Date().toLocaleTimeString("vi-VN");
+      $("updated").textContent = "updated " + new Date().toLocaleTimeString();
     }
 
     async function load() {
@@ -113,7 +149,7 @@
         render(await res.json());
       } catch (err) {
         $("monStatus").className = "status error";
-        $("monStatus").textContent = `Lỗi khi tải số liệu: ${err.message}`;
+        $("monStatus").textContent = `Couldn't load metrics: ${err.message}`;
       }
     }
 

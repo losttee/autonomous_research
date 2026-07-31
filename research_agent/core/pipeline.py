@@ -88,7 +88,7 @@ def _execute_plan(
         _emit(
             on_progress,
             "execute",
-            f"Đang thu thập dữ liệu (bước {index}/{len(batches)})…",
+            f"Gathering sources (batch {index}/{len(batches)})…",
             batch=index,
             batches=len(batches),
             sub_tasks=len(batch),
@@ -177,7 +177,7 @@ def run_research(
             _emit(
                 on_progress,
                 "recall",
-                "Tìm thấy câu trả lời gần giống trong bộ nhớ…",
+                "Found a near-identical answer in memory…",
                 score=round(score, 4),
             )
             recalled_report = _mark_recalled(report, score)
@@ -185,7 +185,7 @@ def run_research(
                 return ResearchOutcome(report=recalled_report)
             return recalled_report
 
-    _emit(on_progress, "plan", "Đang lập kế hoạch nghiên cứu…")
+    _emit(on_progress, "plan", "Planning the research…")
     plan = plan_question(question, tracker=tracker, llm=llm)
     results = _execute_plan(plan, tracker, tool, llm, on_progress)
 
@@ -201,7 +201,7 @@ def run_research(
         _emit(
             on_progress,
             "replan",
-            "Bằng chứng thu được quá mỏng, đang lập kế hoạch lại…",
+            "Evidence is thin — re-planning…",
             revision=plan.revision + 1,
         )
         new_plan = plan_question(question, tracker=tracker, llm=llm)
@@ -220,10 +220,10 @@ def run_research(
 
     # Verify grounding of every claim before synthesis — this is where claims
     # earn their confidence and contradictions surface.
-    _emit(on_progress, "verify", "Đang đối chiếu từng nhận định với nguồn gốc…")
+    _emit(on_progress, "verify", "Checking each claim against its sources…")
     verify_results(results, tracker, llm=llm)
 
-    _emit(on_progress, "synthesize", "Đang tổng hợp báo cáo…")
+    _emit(on_progress, "synthesize", "Writing the report…")
     report = synthesize_llm(plan, results, tracker, llm=llm)
 
     # Remember this run so a future near-identical question can reuse it, and so

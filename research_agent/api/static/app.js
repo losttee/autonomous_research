@@ -17,16 +17,27 @@ function bandClass(band) {
 
 const pct = (x) => `${Math.round((x || 0) * 100)}%`;
 
+// Report bodies come from an LLM and usually carry markdown. marked +
+// DOMPurify (loaded from CDN in index.html) render it safely; if either
+// library failed to load we fall back to escaped plain text.
+if (window.marked) marked.use({ gfm: true, breaks: true });
+function rich(text) {
+  if (window.marked && window.DOMPurify) {
+    return DOMPurify.sanitize(marked.parse(String(text ?? "")));
+  }
+  return `<div class="plain">${esc(text)}</div>`;
+}
+
 function renderSources(sources) {
   if (!sources || !sources.length) return "";
   const items = sources.map((s) => {
     const title = esc(s.title || s.source_id);
     const link = s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener">${title}</a>` : title;
-    const rel = s.reliability != null ? ` · tin cậy ${pct(s.reliability)}` : "";
-    const mem = s.type === "memory" ? ` <span class="badge b-medium">bộ nhớ</span>` : "";
+    const rel = s.reliability != null ? ` · ${pct(s.reliability)} reliable` : "";
+    const mem = s.type === "memory" ? ` <span class="badge b-medium">memory</span>` : "";
     return `<li>${link} <span class="meta">[${esc(s.source_id)}] ${esc(s.type)}${rel}</span>${mem}</li>`;
   }).join("");
-  return `<div class="src"><b>Nguồn (${sources.length})</b><ul>${items}</ul></div>`;
+  return `<div class="src"><b>Sources (${sources.length})</b><ul>${items}</ul></div>`;
 }
 
 function render(data) {
@@ -35,17 +46,17 @@ function render(data) {
 
   parts.push(`<div class="card result-card">
     <div class="metrics">
-      <div class="metric"><b>${pct(r.overall_confidence)}</b><span>Độ tin cậy</span></div>
-      <div class="metric"><b>$${(data.cost_usd || 0).toFixed(4)}</b><span>Chi phí</span></div>
+      <div class="metric"><b>${pct(r.overall_confidence)}</b><span>Confidence</span></div>
+      <div class="metric"><b>$${(data.cost_usd || 0).toFixed(4)}</b><span>Cost</span></div>
       <div class="metric"><b>${data.llm_calls}</b><span>LLM calls</span></div>
       <div class="metric"><b>${data.tool_calls}</b><span>Tool calls</span></div>
-      <div class="metric"><b>${(data.elapsed_sec || 0).toFixed(1)}s</b><span>Thời gian</span></div>
+      <div class="metric"><b>${(data.elapsed_sec || 0).toFixed(1)}s</b><span>Time</span></div>
     </div>
   </div>`);
 
   parts.push(`<div class="card result-card">
-    <h2>Khuyến nghị</h2>
-    <div class="rec">${esc(r.recommendation)}</div>
+    <h2>Recommendation</h2>
+    <div class="rec md">${rich(r.recommendation)}</div>
   </div>`);
 
   if (r.sections && r.sections.length) {
@@ -54,18 +65,18 @@ function render(data) {
         <h3>${esc(s.heading)}</h3>
         <span class="badge ${bandClass(s.confidence_band)}">${esc(s.confidence_band)}</span>
       </div>
-      <div class="body-text">${esc(s.body)}</div>`).join("");
-    parts.push(`<div class="card result-card"><h2>Phân tích</h2>${secs}</div>`);
+      <div class="body-text md">${rich(s.body)}</div>`).join("");
+    parts.push(`<div class="card result-card"><h2>Analysis</h2>${secs}</div>`);
   }
 
   if (r.uncertainties && r.uncertainties.length) {
     const items = r.uncertainties.map((u) => `<li>${esc(u)}</li>`).join("");
-    parts.push(`<div class="card result-card warn-box"><h2>Điểm chưa chắc chắn</h2><ul>${items}</ul></div>`);
+    parts.push(`<div class="card result-card warn-box"><h2>What we're not sure about</h2><ul>${items}</ul></div>`);
   }
 
   if (r.contradictions && r.contradictions.length) {
     const items = r.contradictions.map((c) => `<li>${esc(c)}</li>`).join("");
-    parts.push(`<div class="card result-card contra-box"><h2>Mâu thuẫn giữa các nguồn</h2><ul>${items}</ul></div>`);
+    parts.push(`<div class="card result-card contra-box"><h2>Where sources disagree</h2><ul>${items}</ul></div>`);
   }
 
   if (r.all_sources && r.all_sources.length) {
@@ -125,12 +136,12 @@ async function runStream(question) {
       } else if (event === "result") {
         data = parsed;
       } else if (event === "error") {
-        throw new Error(parsed.message || "Lỗi không xác định từ server.");
+        throw new Error(parsed.message || "Unknown server error.");
       }
     }
   }
 
-  if (!data) throw new Error("Kết thúc luồng mà không nhận được kết quả.");
+  if (!data) throw new Error("Stream ended without a result.");
   return data;
 }
 
@@ -148,7 +159,7 @@ async function run() {
   const question = qEl.value.trim();
   if (question.length < 3) {
     statusEl.className = "status error";
-    statusEl.textContent = "Câu hỏi cần ít nhất 3 ký tự.";
+    statusEl.textContent = "Add a little more detail — 3 characters minimum.";
     statusEl.classList.remove("hidden");
     return;
   }
@@ -156,7 +167,7 @@ async function run() {
   goEl.disabled = true;
   resultEl.classList.add("hidden");
   resultEl.innerHTML = "";
-  setProgress("Đang lập kế hoạch và thu thập dữ liệu, có thể mất một lúc…");
+  setProgress("Planning the research…");
 
   try {
     let data;
@@ -165,14 +176,14 @@ async function run() {
     } catch (streamErr) {
       // Streaming unavailable (older server) or broke before a result —
       // one classic retry still gets the answer.
-      setProgress("Đang thu thập dữ liệu, có thể mất một lúc…");
+      setProgress("Gathering and checking sources…");
       data = await runClassic(question);
     }
     statusEl.classList.add("hidden");
     render(data);
   } catch (err) {
     statusEl.className = "status error";
-    statusEl.textContent = `Lỗi: ${err.message}`;
+    statusEl.textContent = `Error: ${err.message}`;
   } finally {
     goEl.disabled = false;
   }
@@ -188,3 +199,23 @@ chipsEl.addEventListener("click", (e) => {
   qEl.value = chip.textContent.trim();
   qEl.focus();
 });
+
+// --- live stats strip ------------------------------------------------------
+// Quiet proof-of-work under the examples: real totals from /metrics.
+(async () => {
+  const el = $("liveStats");
+  if (!el) return;
+  try {
+    const res = await fetch("/metrics");
+    if (!res.ok) return;
+    const d = await res.json();
+    if (!d.run_count) return;
+    el.textContent =
+      `${d.run_count} runs completed · ` +
+      `$${d.avg_run_cost_usd.toFixed(4)} avg cost · ` +
+      `${(d.avg_run_latency_ms / 1000).toFixed(1)}s avg runtime`;
+    el.classList.remove("hidden");
+  } catch {
+    // dashboard data is optional on the landing page — stay silent
+  }
+})();

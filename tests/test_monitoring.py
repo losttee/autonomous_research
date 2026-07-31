@@ -155,7 +155,7 @@ def test_research_stream_emits_progress_then_result(client) -> None:
     assert "event: result" in text
     assert '"report"' in text
     # stages arrive in pipeline order inside the stream
-    assert text.index("Đang lập kế hoạch") < text.index("Đang tổng hợp báo cáo")
+    assert text.index("Planning the research") < text.index("Writing the report")
 
 
 def test_classic_research_endpoint_still_works(client) -> None:
