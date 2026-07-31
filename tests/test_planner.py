@@ -10,7 +10,6 @@ import json
 
 from research_agent.core.contracts import SubTask
 from research_agent.core.llm import LLMError
-from research_agent.core.pipeline import run_research
 from research_agent.executor.web_search import StubSearchTool
 from research_agent.guardrail.cost_tracker import CostTracker
 from research_agent.planner.planner import plan_question
@@ -66,14 +65,7 @@ def test_planner_drops_dangling_dependencies() -> None:
 
 
 def test_end_to_end_with_multitask_plan() -> None:
-    reply = json.dumps({
-        "sub_tasks": [
-            {"id": "t1", "description": "Look up premium of plan A", "depends_on": []},
-            {"id": "t2", "description": "Look up premium of plan B", "depends_on": []},
-        ]
-    })
-    # Patch the module-level planner LLM by injecting through the fake at plan time.
-    # run_research builds its own plan; verify parallel path via _run_batch instead.
+    # run_research builds its own plan; verify the parallel path via _run_batch instead.
     from research_agent.core.pipeline import _run_batch
     tracker = CostTracker()
     tasks = [SubTask(description="Look up premium of plan A"),
