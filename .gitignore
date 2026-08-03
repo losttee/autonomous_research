@@ -25,3 +25,6 @@ evaluation/results/*
 # IDE
 .vscode/
 .idea/
+
+# Planning & internal
+ROADMAP.md
