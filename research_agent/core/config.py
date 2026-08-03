@@ -79,6 +79,10 @@ class Settings(BaseSettings):
     tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
     search_max_results: int = Field(default=5, alias="SEARCH_MAX_RESULTS")
 
+    # --- Tools ---
+    # Local folder the document tool searches for INTERNAL_RAG sources.
+    document_root: str = Field(default="./data/documents", alias="DOCUMENT_ROOT")
+
     # --- Memory / RAG ---
     chroma_persist_dir: str = Field(default="./data/chroma", alias="CHROMA_PERSIST_DIR")
     embedding_model: str = Field(

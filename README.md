@@ -30,13 +30,23 @@ Two concerns cut across the whole pipeline:
 - **Guardrail** (`guardrail/cost_tracker.py`) — enforces hard per-request limits on LLM calls, tool calls, tokens, spend, and wall-clock time to prevent runaway cost.
 - **Memory** (`memory/`) — working memory and vector store, used by later stages for retrieval and recall.
 
+The planner assigns one tool per sub-task (`web`, `calculator`, or `documents`)
+and the executor dispatches on that hint:
+
+- **Calculator** — the LLM only extracts the arithmetic expression; the math runs
+  through a restricted AST evaluator, so computed numbers are exact and cited as
+  `CALCULATOR` sources (reliability 1.0).
+- **Documents** — keyword search over `DOCUMENT_ROOT` (markdown/text/JSON/CSV),
+  surfaced as `INTERNAL_RAG` sources so internal files are cited like web pages.
+
 ## Project layout
 
 ```
 research_agent/
 ├── core/          Data contracts, configuration, pipeline, LLM client, logging
 ├── planner/       Decomposes a question into sub-tasks
-├── executor/      Runs sub-tasks and web-search tooling
+├── executor/      Runs sub-tasks; tooling in executor/mcp_servers/
+│                  (web search, exact calculator, internal documents)
 ├── verifier/      Grounding and claim verification
 ├── synthesizer/   Generates the final report
 ├── guardrail/     Cost tracking and enforcement

@@ -18,6 +18,7 @@ from typing import Any, Optional
 from research_agent.core.contracts import (
     Claim,
     SourceRef,
+    SourceType,
     SubTask,
     SubTaskResult,
     SubTaskStatus,
@@ -148,6 +149,28 @@ def _augment_with_memory(
     return sources + recalled
 
 
+def _select_tool(
+    task: SubTask,
+    search_tool: SearchTool | None,
+    llm: Optional[LLMClient],
+    tracker: CostTracker,
+) -> SearchTool:
+    """Pick the tool matching the planner's hint; unknown hints fall back to web.
+
+    The interface is identical across tools (search -> list[SourceRef]), so the
+    rest of the runner never changes when a new tool joins.
+    """
+    if task.tool_hint == SourceType.CALCULATOR:
+        from research_agent.executor.mcp_servers.calculator import CalculatorTool
+
+        return CalculatorTool(llm=llm, tracker=tracker)
+    if task.tool_hint == SourceType.INTERNAL_RAG:
+        from research_agent.executor.mcp_servers.documents import DocumentTool
+
+        return DocumentTool()
+    return search_tool or get_search_tool()
+
+
 def run_subtask(
     task: SubTask,
     tracker: CostTracker,
@@ -160,7 +183,7 @@ def run_subtask(
     Budget is checked before the tool call; if exceeded, the sub-task is marked
     SKIPPED so the pipeline can still return partial results.
     """
-    tool = search_tool or get_search_tool()
+    tool = _select_tool(task, search_tool, llm, tracker)
     start = time.monotonic()
 
     try:
