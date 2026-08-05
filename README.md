@@ -17,7 +17,8 @@ Executor      Run each sub-task with tools (web search, ...) and return
    │           distilled claims plus their supporting sources.
    ▼
 Verifier      Check each claim for grounding, attach a confidence score,
-   │           and surface contradictions between sources.
+   │           merge duplicate findings, and surface contradictions —
+   │           between sources and across sub-tasks.
    ▼
 Synthesizer   Produce the final report: recommendation, cited analysis,
    │           and an explicit account of what remains uncertain.

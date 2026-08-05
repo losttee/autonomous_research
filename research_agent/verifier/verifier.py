@@ -15,12 +15,14 @@ on source reliability so the claim still gets a sensible, non-zero confidence.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Optional
 
 from research_agent.core.contracts import (
     Claim,
     SourceRef,
     SubTaskResult,
+    SubTaskStatus,
 )
 from research_agent.core.llm import LLMClient, LLMError, get_llm_client
 from research_agent.core.logging import get_logger, log_step
@@ -157,11 +159,14 @@ def verify_results(
     results: list[SubTaskResult],
     tracker: CostTracker,
     llm: Optional[LLMClient] = None,
+    adversarial: bool | None = None,
 ) -> list[SubTaskResult]:
     """Verify every claim across all sub-task results, in place.
 
     Stops issuing new LLM calls once the budget is exceeded, falling back to the
     heuristic for the remaining claims so verification always completes.
+    `adversarial` (default: the ADVERSARIAL_VERIFY setting) adds a second pass
+    that tries to refute the strongest claims — extra cost, off by default.
     """
     verified = 0
     supported = 0
@@ -199,4 +204,249 @@ def verify_results(
             "budget_hit": budget_hit,
         },
     )
+
+    if adversarial is None:
+        from research_agent.core.config import get_settings
+
+        adversarial = get_settings().adversarial_verify
+    if adversarial:
+        adversarial_pass(results, tracker, llm=llm)
     return results
+
+
+# --- Consolidation ----------------------------------------------------------
+# After per-claim verification: merge near-duplicate findings so the
+# synthesizer sees less noise, then flag findings that agree on the topic but
+# disagree on the numbers across sub-tasks. Both are deterministic (no LLM)
+# and feed the report's transparency fields through contradiction_note.
+
+_TOKEN_RE = re.compile(r"\w+", re.UNICODE)
+_NUM_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
+
+# Near-identical wording -> same finding.
+_DEDUP_JACCARD = 0.8
+# Same topic, different numbers -> contradiction candidate. Kept conservative:
+# a false flag only adds a visible note, a missed one hides a real conflict.
+_CONTRA_TOPIC_JACCARD = 0.3
+_MAX_CROSS_FACTS = 100
+
+# Adversarial second pass: only strong claims, and never more than a handful —
+# every check is an extra LLM call.
+_ADVERSARIAL_MIN_CONFIDENCE = 0.6
+_ADVERSARIAL_MAX_CLAIMS = 5
+
+_ADVERSARIAL_SYSTEM = (
+    "You are an adversarial fact-checker. Your job is to REFUTE the claim if "
+    "the snippets allow it. Judge ONLY the provided snippets, never outside "
+    "knowledge. Return STRICT JSON only."
+)
+
+_ADVERSARIAL_TEMPLATE = """Claim:
+{claim}
+
+Cited source snippets (id: snippet):
+{sources}
+
+Return a JSON object of this exact shape:
+{{"refuted": true, "reason": "<empty string, or why the snippets contradict the claim>"}}
+
+Rules:
+- refuted=true ONLY if the snippets contain direct evidence AGAINST the claim.
+- Weakness, vagueness, or missing detail is NOT refutation.
+- Output JSON only, no prose."""
+
+
+def _tokens(text: str) -> set[str]:
+    return set(_TOKEN_RE.findall(text.lower()))
+
+
+def _jaccard(a: set[str], b: set[str]) -> float:
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
+
+
+def dedupe_claims(results: list[SubTaskResult]) -> list[SubTaskResult]:
+    """Merge near-identical claims across all results, keeping the strongest.
+
+    Deterministic token-Jaccard grouping (no LLM). The survivor takes the
+    higher confidence and its supported verdict, the union of supporting
+    sources, and any contradiction note — grounding is never lost, only
+    de-duplicated. Mutates the results in place and returns them.
+    """
+    kept: list[Claim] = []
+    kept_tokens: list[set[str]] = []
+    before = 0
+    for result in results:
+        survivors: list[Claim] = []
+        for claim in result.claims:
+            before += 1
+            claim_tokens = _tokens(claim.text)
+            match: Optional[Claim] = None
+            for survivor, survivor_tokens in zip(kept, kept_tokens):
+                if _jaccard(claim_tokens, survivor_tokens) >= _DEDUP_JACCARD:
+                    match = survivor
+                    break
+            if match is None:
+                kept.append(claim)
+                kept_tokens.append(claim_tokens)
+                survivors.append(claim)
+                continue
+            merged = list(dict.fromkeys(match.supporting_source_ids + claim.supporting_source_ids))
+            match.supporting_source_ids = merged
+            if claim.confidence > match.confidence:
+                match.confidence = claim.confidence
+                match.supported = claim.supported
+            if claim.contradiction_note and not match.contradiction_note:
+                match.contradiction_note = claim.contradiction_note
+        result.claims = survivors
+    log_step(
+        _log,
+        step_type="dedupe",
+        step_id="verifier",
+        msg="claims deduplicated",
+        extra={"claims_before": before, "claims_after": len(kept),
+               "merged": before - len(kept)},
+    )
+    return results
+
+
+def _numeric_signature(claim: Claim) -> Optional[tuple[set[str], frozenset[str]]]:
+    """(topic tokens, numbers) for a claim that carries at least one number."""
+    numbers = _NUM_RE.findall(claim.text)
+    if not numbers:
+        return None
+    topics = _tokens(_NUM_RE.sub(" ", claim.text))
+    return topics, frozenset(n.replace(",", ".") for n in numbers)
+
+
+def find_cross_contradictions(
+    results: list[SubTaskResult],
+) -> list[tuple[Claim, Claim]]:
+    """Supported claims about the same topic that give different numbers.
+
+    Deterministic and cheap by design — this pass runs on every request, so it
+    must not cost LLM calls. Capped to keep the pairwise scan bounded.
+    """
+    facts: list[tuple[Claim, set[str], frozenset[str]]] = []
+    for result in results:
+        if result.status != SubTaskStatus.DONE:
+            continue
+        for claim in result.claims:
+            if not claim.supported:
+                continue
+            signature = _numeric_signature(claim)
+            if signature is not None:
+                facts.append((claim, signature[0], signature[1]))
+
+    pairs: list[tuple[Claim, Claim]] = []
+    pool = facts[:_MAX_CROSS_FACTS]
+    for i, (claim_a, topics_a, nums_a) in enumerate(pool):
+        for claim_b, topics_b, nums_b in pool[i + 1:]:
+            if nums_a == nums_b:
+                continue
+            if _jaccard(topics_a, topics_b) >= _CONTRA_TOPIC_JACCARD:
+                pairs.append((claim_a, claim_b))
+    return pairs
+
+
+def flag_cross_contradictions(results: list[SubTaskResult]) -> int:
+    """Mark conflicting pairs so the synthesis transparency pass surfaces them.
+
+    Both sides get a note quoting the other finding — the report shows the
+    disagreement rather than picking a winner. Returns the number of pairs.
+    """
+    pairs = find_cross_contradictions(results)
+    for claim_a, claim_b in pairs:
+        for target, other in ((claim_a, claim_b), (claim_b, claim_a)):
+            note = f"conflicts with another finding: '{other.text}'"
+            target.contradiction_note = (
+                note if not target.contradiction_note
+                else f"{target.contradiction_note}; also {note}"
+            )
+    if pairs:
+        log_step(
+            _log,
+            step_type="cross_contradictions",
+            step_id="verifier",
+            msg="conflicting findings across sub-tasks",
+            extra={"pairs": len(pairs)},
+        )
+    return len(pairs)
+
+
+def adversarial_pass(
+    results: list[SubTaskResult],
+    tracker: CostTracker,
+    llm: Optional[LLMClient] = None,
+    max_claims: int = _ADVERSARIAL_MAX_CLAIMS,
+) -> int:
+    """Second opinion on the strongest claims: ask the model to refute them.
+
+    A refuted claim is retracted — unsupported, zero confidence, and the reason
+    surfaces as a contradiction note. A failed check call changes nothing (the
+    claim stands); a budget hit ends the pass early. Returns refuted count.
+    """
+    from research_agent.core.config import get_settings
+
+    client = llm or get_llm_client()
+    model = get_settings().verifier_model
+    checked = 0
+    refuted = 0
+
+    for result in results:
+        if result.status != SubTaskStatus.DONE:
+            continue
+        by_id = _sources_by_id(result.sources)
+        for claim in result.claims:
+            if checked >= max_claims:
+                log_step(
+                    _log, step_type="adversarial", step_id="verifier",
+                    msg="adversarial pass capped",
+                    extra={"checked": checked, "refuted": refuted},
+                )
+                return refuted
+            if not claim.supported or claim.confidence < _ADVERSARIAL_MIN_CONFIDENCE:
+                continue
+            cited = [by_id[sid] for sid in claim.supporting_source_ids if sid in by_id]
+            if not cited:
+                continue
+            try:
+                tracker.check()
+            except BudgetExceeded:
+                log_step(
+                    _log, step_type="adversarial", step_id="verifier",
+                    msg="adversarial pass stopped by budget",
+                    extra={"checked": checked, "refuted": refuted},
+                )
+                return refuted
+            rendered = "\n".join(
+                f"{s.source_id}: {(s.snippet or s.title)[:500]}" for s in cited
+            )
+            try:
+                data = client.complete_json(
+                    _ADVERSARIAL_TEMPLATE.format(claim=claim.text, sources=rendered),
+                    model=model,
+                    system=_ADVERSARIAL_SYSTEM,
+                    max_tokens=300,
+                    temperature=0.0,
+                    tracker=tracker,
+                )
+            except LLMError:
+                continue  # an unavailable attacker changes nothing — claim stands
+            checked += 1
+            if isinstance(data, dict) and data.get("refuted") is True:
+                reason = str(data.get("reason", "")).strip() or "refuted on review"
+                claim.supported = False
+                claim.confidence = 0.0
+                claim.contradiction_note = f"refuted on adversarial review: {reason}"
+                refuted += 1
+
+    log_step(
+        _log,
+        step_type="adversarial",
+        step_id="verifier",
+        msg="adversarial pass complete",
+        extra={"checked": checked, "refuted": refuted},
+    )
+    return refuted

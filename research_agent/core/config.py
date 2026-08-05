@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     max_usd_budget: float = Field(default=1.5, alias="MAX_USD_BUDGET")
     request_timeout_sec: int = Field(default=180, alias="REQUEST_TIMEOUT_SEC")
     max_replan: int = Field(default=3, alias="MAX_REPLAN")
+    # Adversarial second pass on the strongest claims — an extra LLM round that
+    # tries to refute each one. Costs more; off by default.
+    adversarial_verify: bool = Field(default=False, alias="ADVERSARIAL_VERIFY")
 
     # --- Cost ---
     # Overrides the MODEL_PRICING table above without a code change, format

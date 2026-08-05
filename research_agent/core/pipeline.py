@@ -32,7 +32,11 @@ from research_agent.executor.web_search import SearchTool, get_search_tool
 from research_agent.guardrail.cost_tracker import BudgetExceeded, CostTracker
 from research_agent.planner.planner import plan_question
 from research_agent.synthesizer.report_generator import synthesize_llm
-from research_agent.verifier.verifier import verify_results
+from research_agent.verifier.verifier import (
+    dedupe_claims,
+    flag_cross_contradictions,
+    verify_results,
+)
 
 _log = get_logger("pipeline")
 
@@ -222,6 +226,12 @@ def run_research(
     # earn their confidence and contradictions surface.
     _emit(on_progress, "verify", "Checking each claim against its sources…")
     verify_results(results, tracker, llm=llm)
+
+    # Consolidate before synthesis: merge near-duplicate findings (less token
+    # spend, no repeated points), then flag findings that agree on the topic
+    # but disagree on the numbers across sub-tasks.
+    dedupe_claims(results)
+    flag_cross_contradictions(results)
 
     _emit(on_progress, "synthesize", "Writing the report…")
     report = synthesize_llm(plan, results, tracker, llm=llm)
