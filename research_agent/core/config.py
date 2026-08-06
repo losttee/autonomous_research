@@ -97,6 +97,9 @@ class Settings(BaseSettings):
     memory_recall_threshold: float = Field(
         default=0.92, alias="MEMORY_RECALL_THRESHOLD"
     )
+    # Memories older than this are never served as evidence (recall misses,
+    # RAG claims dropped) — prices and figures go stale. 0 disables expiry.
+    memory_ttl_days: int = Field(default=30, alias="MEMORY_TTL_DAYS")
 
     # --- Logging ---
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")

@@ -13,6 +13,7 @@ RAG returns nothing) and a research run proceeds exactly as if memory were off.
 from __future__ import annotations
 
 import threading
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 from research_agent.core.config import Settings, get_settings
@@ -33,6 +34,18 @@ _log = get_logger("memory")
 
 _STORE_FILENAME = "memory.json"
 
+# A memory this similar to an existing one adds nothing — skip the write so
+# re-running the same topics doesn't bloat the store with duplicates.
+_DEDUP_THRESHOLD = 0.98
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _age_days(ts: datetime) -> float:
+    return (_now_utc() - ts).total_seconds() / 86400.0
+
 
 class MemoryStore:
     """Recall past reports and surface past claims as RAG sources."""
@@ -52,14 +65,34 @@ class MemoryStore:
         self._store = store if store is not None else VectorStore(path)
         self._lock = threading.Lock()
 
+    @property
+    def vector_store(self) -> VectorStore:
+        """The underlying store — exposed for offline tooling like the probe."""
+        return self._store
+
+    def _is_duplicate(self, vector: list[float], kind: str) -> bool:
+        """True when a near-identical entry already exists (cosine >= dedup bar)."""
+        hits = self._store.query(vector, top_k=1, kind=kind)
+        return bool(hits) and hits[0][1] >= _DEDUP_THRESHOLD
+
     # --- Recall a whole report -------------------------------------------------
 
     def remember_report(
         self, report: FinalReport, tracker: Optional["CostTracker"] = None
     ) -> None:
-        """Persist a report keyed by its question so a later run can reuse it."""
+        """Persist a report keyed by its question so a later run can reuse it.
+
+        Near-identical questions already remembered are skipped — re-running the
+        same topic must not pile up duplicate copies.
+        """
         try:
             vec = self._embedder.embed_one(report.question, tracker=tracker)
+            if self._is_duplicate(vec, kind="report"):
+                _log.info(
+                    "report already remembered; skipping duplicate",
+                    extra={"extra_fields": {"question": report.question[:80]}},
+                )
+                return
             self._store.add(
                 text=report.question,
                 vector=vec,
@@ -99,6 +132,18 @@ class MemoryStore:
             report = FinalReport.model_validate(raw)
         except Exception:
             return None
+        ttl = self._settings.memory_ttl_days
+        if ttl > 0:
+            age = _age_days(report.created_at)
+            if age > ttl:
+                log_step(
+                    _log,
+                    step_type="memory_recall",
+                    step_id=report.report_id,
+                    msg="matched report is stale; not reusing",
+                    extra={"age_days": round(age, 1), "ttl_days": ttl},
+                )
+                return None
         log_step(
             _log,
             step_type="memory_recall",
@@ -113,13 +158,19 @@ class MemoryStore:
     def remember_claims(
         self, result: SubTaskResult, tracker: Optional["CostTracker"] = None
     ) -> None:
-        """Persist each verified, supported claim as a retrievable memory entry."""
+        """Persist each verified, supported claim as a retrievable memory entry.
+
+        Claims already remembered (near-identical text) are skipped; every entry
+        carries a timestamp so freshness can discount it later.
+        """
         supported = [c for c in result.claims if c.supported and c.text]
         if not supported:
             return
         try:
             vecs = self._embedder.embed([c.text for c in supported], tracker=tracker)
             for claim, vec in zip(supported, vecs):
+                if self._is_duplicate(vec, kind="claim"):
+                    continue
                 self._store.add(
                     text=claim.text,
                     vector=vec,
@@ -127,6 +178,7 @@ class MemoryStore:
                         "kind": "claim",
                         "confidence": claim.confidence,
                         "sub_task_id": result.sub_task_id,
+                        "ts": _now_utc().isoformat(),
                     },
                 )
         except Exception as exc:
@@ -145,7 +197,11 @@ class MemoryStore:
         """Return past claims relevant to the query as MEMORY SourceRefs.
 
         These are grounded (they were supported when stored), so the executor can
-        cite them alongside fresh web results. Best-effort: any error -> []."""
+        cite them alongside fresh web results. Freshness applies: entries older
+        than MEMORY_TTL_DAYS are dropped, and surviving entries have their
+        reliability decayed by up to half as they approach the TTL — a memory
+        is never served at full trust right at its expiry horizon.
+        Best-effort: any error -> []."""
         try:
             vec = self._embedder.embed_one(query, tracker=tracker)
             hits = self._store.query(vec, top_k=max_results, kind="claim")
@@ -154,16 +210,29 @@ class MemoryStore:
                 "search_memory failed", extra={"extra_fields": {"error": str(exc)}}
             )
             return []
+        ttl = self._settings.memory_ttl_days
         sources: list[SourceRef] = []
         for entry, score in hits:
             if score < min_score:
                 continue
+            metadata = entry.get("metadata", {})
+            base = float(metadata.get("confidence", 0.5))
+            ts_raw = metadata.get("ts")
+            age = 0.0  # legacy entries without a timestamp are treated as fresh
+            if ts_raw:
+                try:
+                    age = _age_days(datetime.fromisoformat(ts_raw))
+                except ValueError:
+                    pass
+            if ttl > 0 and age > ttl:
+                continue  # stale memory is not served as evidence
+            decay = max(0.5, 1.0 - 0.5 * age / ttl) if ttl > 0 else 1.0
             sources.append(
                 SourceRef(
                     type=SourceType.MEMORY,
                     title="Recalled from memory",
                     snippet=entry.get("text", ""),
-                    reliability=float(entry.get("metadata", {}).get("confidence", 0.5)),
+                    reliability=round(base * decay, 3),
                 )
             )
         if sources:

@@ -108,3 +108,9 @@ class VectorStore:
     def __len__(self) -> int:
         with self._lock:
             return len(self._entries)
+
+    def snapshot(self) -> list[dict[str, Any]]:
+        """Shallow copies of all entries — a read-only view for offline tooling
+        (e.g. the evaluation memory probe)."""
+        with self._lock:
+            return [dict(entry) for entry in self._entries]

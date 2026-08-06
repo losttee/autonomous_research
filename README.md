@@ -122,6 +122,7 @@ Hard per-request limits (set in `.env`) keep cost bounded during experimentation
 | `MAX_REPLAN`          | Maximum number of re-planning rounds |
 | `MODEL_PRICING`       | Optional price overrides, `model:in:out,...` USD/1M tokens |
 | `LOG_FILE`            | JSON-lines log the monitoring dashboard reads |
+| `MEMORY_TTL_DAYS`     | Memories older than this are never served as evidence (0 = off) |
 
 Model tiers (`PLANNER_MODEL`, `WORKER_MODEL`, `VERIFIER_MODEL`) let you assign a stronger model to planning and cheaper models to workers and verification.
 
