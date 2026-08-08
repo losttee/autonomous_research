@@ -1,4 +1,4 @@
-"""Week-7 tests — calculator & document tools, planner tool selection, dispatch.
+"""Tool tests: calculator and documents, planner tool selection, dispatch.
 
 Deterministic: FakeLLM, temp document roots, no network, no API key.
 Run: .venv\\Scripts\\python.exe -m pytest tests/test_tools_week7.py -v

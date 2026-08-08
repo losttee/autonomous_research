@@ -159,6 +159,22 @@ The web UI streams progress over SSE on **/research/stream** — the question
 page shows each stage (planning → gathering → verifying → synthesizing) live
 instead of a blank wait, and falls back to the classic endpoint automatically.
 
+## Benchmark
+
+`evaluation/benchmark.py` quantifies what the grounding machinery buys: every
+golden question runs through the pipeline **twice** — verifier on vs. verifier
+off (`run_research(..., verify_claims=False)`), everything else identical —
+and both reports are scored with the eval metrics. The headline number is the
+**grounding-precision delta**: how much more often an independent LLM judge
+confirms that claims are really supported by their snippets.
+
+```powershell
+# COST: two real pipeline runs per question — keep --limit small while exploring
+.venv\Scripts\python.exe -m evaluation.benchmark --limit 3
+```
+
+Results land in `evaluation/results/benchmark_<timestamp>.json`.
+
 ## Testing
 
 ```powershell

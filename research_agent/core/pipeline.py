@@ -1,13 +1,11 @@
-"""Pipeline orchestrator — wires the layers end-to-end.
+"""Pipeline orchestrator.
 
-Flow:  question -> LLM plan (parallelizable sub-tasks) -> execute batches
-concurrently -> re-plan up to MAX_REPLAN times while evidence is thin ->
-verify claim grounding -> synthesize -> report.
+question -> plan (parallelizable sub-tasks) -> execute batches concurrently ->
+re-plan while evidence is thin (up to MAX_REPLAN) -> verify claims ->
+synthesize -> report.
 
-Sub-tasks within a dependency batch are independent, so each batch runs on a
-thread pool (search + LLM calls are I/O-bound, so threads give real concurrency
-here). The CostTracker is shared and thread-safe, so the budget cap still holds
-across parallel workers.
+Tasks in a batch are independent and I/O-bound, so each batch runs on a thread
+pool; the CostTracker is thread-safe, so budget caps hold across workers.
 """
 
 from __future__ import annotations
@@ -40,16 +38,14 @@ from research_agent.verifier.verifier import (
 
 _log = get_logger("pipeline")
 
-# Cap on concurrent workers per batch — a fuse against fanning out too wide.
+# Max concurrent workers per batch.
 _MAX_WORKERS = 5
 
 
 @dataclass
 class ResearchOutcome:
-    """Report plus the plan and sub-task results behind it.
+    """Report plus the plan and sub-task results behind it (for evaluation).
 
-    Returned by run_research(..., return_details=True) so evaluation tooling
-    can inspect claim-level data the FinalReport deliberately distills away.
     plan/results stay empty for reports served from memory recall.
     """
 
@@ -87,7 +83,17 @@ def _execute_plan(
     for index, batch in enumerate(batches, 1):
         try:
             tracker.check()
-        except BudgetExceeded:
+        except BudgetExceeded as exc:
+            # Mark unstarted tasks SKIPPED so the report shows the gap.
+            results.extend(
+                SubTaskResult(
+                    sub_task_id=task.sub_task_id,
+                    status=SubTaskStatus.SKIPPED,
+                    error=f"skipped due to budget: {exc.reason}",
+                )
+                for remaining in batches[index - 1:]
+                for task in remaining
+            )
             break  # return partial results gathered so far
         _emit(
             on_progress,
@@ -102,7 +108,7 @@ def _execute_plan(
 
 
 def _evidence_is_thin(results: list[SubTaskResult]) -> bool:
-    """True when almost nothing was grounded — a signal to try one re-plan."""
+    """True when nothing was grounded."""
     usable = [r for r in results if r.status == SubTaskStatus.DONE and r.claims]
     return len(usable) == 0
 
@@ -110,7 +116,7 @@ def _evidence_is_thin(results: list[SubTaskResult]) -> bool:
 def _emit(
     on_progress: Optional[Callable[..., None]], step: str, msg: str, **extra: object
 ) -> None:
-    """Fire one progress event. Best-effort: a broken listener never breaks a run."""
+    """Best-effort progress event; a failing listener must not break the run."""
     if on_progress is None:
         return
     try:
@@ -130,7 +136,7 @@ def _get_memory(use_memory: bool | None):
 
 
 def _mark_recalled(report: FinalReport, score: float) -> FinalReport:
-    """Flag a cached report transparently so a reused answer is never hidden."""
+    """Mark a cached report so reuse is visible in the output."""
     note = f"Answer reused from a prior near-identical question (similarity {score:.2f})."
     report.recommendation = f"[recalled from memory] {report.recommendation}"
     if note not in report.uncertainties:
@@ -155,19 +161,15 @@ def run_research(
     max_replan: int | None = None,
     return_details: bool = False,
     on_progress: Optional[Callable[..., None]] = None,
+    verify_claims: bool = True,
 ) -> FinalReport | ResearchOutcome:
     """Run the full pipeline for one question and return a FinalReport.
 
-    Always returns a report — partial if the budget is exceeded mid-run. While
-    the plan yields no grounded evidence, it re-plans up to MAX_REPLAN rounds
-    (override with `max_replan`; 0 disables), each revision chained via
-    previous_plan_id. `llm` overrides the shared client in every layer so tests
-    can run the whole pipeline hermetically. `return_details=True` returns the
-    plan and sub-task results alongside the report for evaluation tooling.
-    `on_progress(step, msg, **extra)` receives one event per pipeline stage
-    (plan/execute/replan/verify/synthesize/recall) for live UI updates.
-    When memory is on, a near-identical past question short-circuits to the
-    cached report; every fresh run's report + claims are remembered for next time.
+    Always returns a report, partial if the budget runs out mid-run. Re-plans
+    up to `max_replan` rounds (default MAX_REPLAN, 0 disables) while nothing is
+    grounded. `llm` overrides the client in every layer (hermetic tests);
+    `on_progress` gets one event per stage; `return_details=True` also returns
+    plan/results; `verify_claims=False` skips verification (benchmark baseline).
     """
     tracker = tracker or CostTracker()
     tool = search_tool or get_search_tool()
@@ -201,11 +203,11 @@ def run_research(
         try:
             tracker.check()
         except BudgetExceeded:
-            break  # keep the thin results; the report will surface the gap
+            break  # out of budget; keep what we have
         _emit(
             on_progress,
             "replan",
-            "Evidence is thin — re-planning…",
+            "Evidence is thin, re-planning…",
             revision=plan.revision + 1,
         )
         new_plan = plan_question(question, tracker=tracker, llm=llm)
@@ -222,29 +224,31 @@ def run_research(
             extra={"revision": plan.revision, "sub_tasks": len(plan.sub_tasks)},
         )
 
-    # Verify grounding of every claim before synthesis — this is where claims
-    # earn their confidence and contradictions surface.
-    _emit(on_progress, "verify", "Checking each claim against its sources…")
-    verify_results(results, tracker, llm=llm)
+    # Verify claims before synthesis.
+    if verify_claims:
+        _emit(on_progress, "verify", "Checking each claim against its sources…")
+        verify_results(results, tracker, llm=llm)
 
-    # Consolidate before synthesis: merge near-duplicate findings (less token
-    # spend, no repeated points), then flag findings that agree on the topic
-    # but disagree on the numbers across sub-tasks.
-    dedupe_claims(results)
-    flag_cross_contradictions(results)
+        # Merge near-duplicate claims, then flag number conflicts across tasks.
+        dedupe_claims(results)
+        flag_cross_contradictions(results)
+    else:
+        # Benchmark baseline: extractor claims pass through unverified.
+        for result in results:
+            for claim in result.claims:
+                claim.supported = bool(claim.supporting_source_ids)
 
     _emit(on_progress, "synthesize", "Writing the report…")
     report = synthesize_llm(plan, results, tracker, llm=llm)
 
-    # Remember this run so a future near-identical question can reuse it, and so
-    # its verified claims are available as RAG sources next time.
+    # Store the report + claims for future recall/RAG.
     if memory is not None:
         try:
             memory.remember_report(report, tracker=tracker)
             for r in results:
                 if r.status == SubTaskStatus.DONE:
                     memory.remember_claims(r, tracker=tracker)
-        except Exception:  # best-effort persistence, never fail the run
+        except Exception:  # best-effort
             pass
 
     total_ms = int((time.monotonic() - start) * 1000)
