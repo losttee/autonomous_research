@@ -1,8 +1,7 @@
-"""Structured JSON logging — log every step of the pipeline.
+"""Structured JSON logging; one line per pipeline step.
 
-Each log line is a JSON object with step_id, step_type, tokens, latency_ms, cost_usd.
-Purpose: measure cost/latency from the very first run (and during benchmark evaluations),
-and feed the monitoring dashboard under monitoring/.
+Each line carries step_id, step_type, tokens, latency_ms, cost_usd; the
+monitoring dashboard aggregates from these.
 
 Usage:
     from research_agent.core.logging import get_logger, log_step
@@ -62,8 +61,8 @@ def _configure_root() -> None:
     stream.setFormatter(formatter)
     root.addHandler(stream)
 
-    # File sink for the monitoring dashboard — one JSON line per step. A broken
-    # log path must never stop the pipeline, so failures degrade to stdout-only.
+    # File sink for the monitoring dashboard. A bad path must not stop the
+    # pipeline, so fall back to stdout only.
     if settings.log_file:
         try:
             path = Path(settings.log_file)

@@ -1,4 +1,4 @@
-"""Evaluation harness tests — metrics logic and pricing overrides.
+"""Evaluation harness tests: metrics logic and pricing overrides.
 
 Run: .venv/Scripts/python.exe -m pytest tests/test_evaluation.py -v
 """

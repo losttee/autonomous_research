@@ -1,11 +1,5 @@
-"""Shared LLM client — the single place every layer talks to the model.
-
-Wraps the OpenAI SDK pointed at the OpenAI-compatible gateway (see LLM_BASE_URL).
-Every call records token usage into a CostTracker so the guardrail can enforce
-hard caps and the JSON logs carry real cost. Layers (planner, executor, verifier,
-synthesizer) call complete() / complete_json() instead of touching the SDK directly,
-so swapping the backend or adding retries happens in one place.
-"""
+"""Shared LLM client. Layers call complete()/complete_json() instead of the
+OpenAI SDK directly, and every call records usage into the CostTracker."""
 
 from __future__ import annotations
 
@@ -24,7 +18,7 @@ _log = get_logger("core.llm")
 
 
 class LLMError(Exception):
-    """Raised when the model call fails after the client's own handling."""
+    """Raised when a model call fails."""
 
 
 class LLMClient:
@@ -49,10 +43,9 @@ class LLMClient:
         tracker: Optional["CostTracker"] = None,
         json_mode: bool = False,
     ) -> str:
-        """Send one chat completion and return the text. Records cost if tracker given.
+        """One chat completion; returns the text. Records cost when a tracker is given.
 
-        Raises LLMError on transport/API failure so callers decide how to degrade
-        (planner falls back to a trivial plan; executor marks the sub-task failed).
+        Raises LLMError on any failure; callers decide how to degrade.
         """
         model = model or self._settings.worker_model
         messages: list[dict[str, str]] = []
@@ -71,7 +64,7 @@ class LLMClient:
 
         try:
             resp = self._client.chat.completions.create(**kwargs)
-        except Exception as exc:  # SDK raises many subclasses; treat uniformly here
+        except Exception as exc:
             _log.warning(
                 "llm call failed",
                 extra={"extra_fields": {"model": model, "error": str(exc)}},
@@ -117,7 +110,7 @@ _client: Optional[LLMClient] = None
 
 
 def get_llm_client() -> LLMClient:
-    """Singleton LLM client — reuse one HTTP connection pool across the request."""
+    """Singleton."""
     global _client
     if _client is None:
         _client = LLMClient()

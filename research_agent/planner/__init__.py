@@ -1,4 +1,4 @@
-"""planner layer — decompose a question into a Plan of parallelizable sub-tasks."""
+"""Question decomposition into sub-tasks."""
 
 from research_agent.planner.planner import plan_question
 

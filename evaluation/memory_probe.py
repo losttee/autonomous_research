@@ -1,15 +1,8 @@
-"""Memory health probe — offline analysis of the vector store.
+"""Memory health probe: offline analysis of the vector store (no LLM).
 
-Measures what decides whether memory helps or hurts:
-
-  - Store size per kind, with a migration nudge once it outgrows the
-    pure-Python store (> 10k entries -> consider chromadb/redis).
-  - Duplicate report clusters: pairs of stored questions with cosine
-    similarity >= MEMORY_RECALL_THRESHOLD. Non-zero means recall should have
-    short-circuited the second question but did not — a direct signal that
-    the recall threshold or dedup needs tuning.
-
-No LLM, no network — it only reads vectors already in the store.
+Reports store size per kind, and duplicate report clusters (pairs of stored
+questions at/above MEMORY_RECALL_THRESHOLD), a signal for tuning the recall
+threshold. Also nudges migration past 10k entries.
 
     .venv\\Scripts\\python.exe -m evaluation.memory_probe
 """
@@ -61,12 +54,12 @@ def main() -> None:
     if data["duplicate_report_pairs"]:
         print(
             f"\nNOTE: {data['duplicate_report_pairs']} report pair(s) sit at/above the "
-            "recall threshold — recall did not merge them. Consider raising "
+            "recall threshold but recall did not merge them. Consider raising "
             "MEMORY_RECALL_THRESHOLD or checking the dedup bar."
         )
     if data["migration_suggested"]:
         print(
-            "\nNOTE: the pure-Python store is past ~10k entries — consider "
+            "\nNOTE: the pure-Python store is past ~10k entries; consider "
             "migrating to chromadb behind the same add()/query() surface."
         )
 

@@ -1,13 +1,9 @@
 """Synthesizer: assemble sub-task results into a FinalReport with citations.
 
-Two modes:
-  - synthesize_llm() (default): the SYNTH_MODEL writes a coherent
-    recommendation + sections in prose, keeping inline [source_id] citations. A
-    lightweight citation check strips any [id] the model invented that doesn't map
-    to a real source (no source, no claim). Confidence bands + overall confidence
-    stay DETERMINISTIC from the Verifier's scores — the model never invents numbers.
-  - synthesize(): deterministic template assembly, no LLM. Kept as the
-    fallback synthesize_llm() degrades to on any LLM/JSON error.
+synthesize_llm() writes the prose; a citation check strips any [id] the model
+invented. Confidence bands and overall confidence come from the verifier's
+scores, never from the model. synthesize() is the template fallback used on
+any LLM/JSON error.
 """
 
 from __future__ import annotations
@@ -173,7 +169,7 @@ def _verified_claims_block(results: list[SubTaskResult]) -> tuple[str, set[str]]
 
 def _strip_invalid_citations(text: str, valid_ids: set[str]) -> tuple[str, int]:
     """Remove any [id] the model wrote that isn't a real source. Returns
-    (clean_text, dropped_count) — enforces 'no source, no claim' on LLM output."""
+    (clean_text, dropped_count)."""
     dropped = 0
 
     def _sub(match: "re.Match[str]") -> str:
@@ -221,7 +217,7 @@ def _collect_transparency(
     plan: Plan, results: list[SubTaskResult]
 ) -> tuple[list[SourceRef], list[str], list[str], float]:
     """Deterministically gather sources, uncertainties, contradictions, and the
-    overall confidence from verifier scores — the parts the LLM must not invent."""
+    overall confidence from verifier scores."""
     desc_by_id = {t.sub_task_id: t.description for t in plan.sub_tasks}
     all_sources: list[SourceRef] = []
     seen: set[str] = set()
@@ -293,8 +289,7 @@ def synthesize_llm(
         )
         return synthesize(plan, results)
 
-    # Section bands come from the verifier's overall confidence — the LLM rewrites
-    # prose across sub-tasks, so per-section scores no longer map cleanly.
+    # Bands use overall confidence; the LLM prose no longer maps per sub-task.
     band = _band(overall)
     sections = [
         ReportSection(

@@ -1,13 +1,7 @@
-"""Pure-Python vector store — the persistence layer under memory/.
+"""Pure-Python vector store backing memory/ (JSON file + cosine similarity).
 
-Deliberately dependency-free (no chromadb/numpy): the corpus here is small
-(reports + claims from past runs on one machine), so a JSON file plus cosine
-similarity in plain Python is enough and keeps a fresh checkout runnable with no
-native builds. Swap this for chromadb later behind the same add()/query() surface
-if the corpus outgrows an in-memory scan.
-
-Thread-safe: the pipeline runs sub-tasks on a thread pool (see cost_tracker.py),
-so multiple workers may add()/query() at once.
+Dependency-free on purpose; if the corpus outgrows an in-memory scan, swap in
+chromadb behind the same add()/query() surface. Thread-safe.
 """
 
 from __future__ import annotations
@@ -54,7 +48,7 @@ class VectorStore:
             if isinstance(data, list):
                 self._entries = [e for e in data if isinstance(e, dict)]
         except (json.JSONDecodeError, OSError):
-            # Corrupt/unreadable store must not crash a run — start empty.
+            # Corrupt store: start empty.
             self._entries = []
 
     def _flush(self) -> None:
@@ -110,7 +104,6 @@ class VectorStore:
             return len(self._entries)
 
     def snapshot(self) -> list[dict[str, Any]]:
-        """Shallow copies of all entries — a read-only view for offline tooling
-        (e.g. the evaluation memory probe)."""
+        """Shallow copies of all entries (read-only view for tooling)."""
         with self._lock:
             return [dict(entry) for entry in self._entries]

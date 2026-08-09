@@ -1,4 +1,4 @@
-"""Memory maturity tests — dedup, freshness/TTL, recall decay, and the probe.
+"""Memory maturity tests: dedup, freshness/TTL, recall decay, and the probe.
 
 Deterministic: the offline hashing embedder, temp stores, no network.
 Run: .venv\\Scripts\\python.exe -m pytest tests/test_memory_maturity.py -v
@@ -24,7 +24,7 @@ from evaluation.memory_probe import analyze
 
 
 class FakeEmbedder:
-    """Deterministic embedder using the offline hashing embedding — no network."""
+    """Deterministic embedder using the offline hashing embedding (no network)."""
 
     def embed(self, texts, tracker=None):
         return [_hash_embedding(t) for t in texts]

@@ -1,4 +1,4 @@
-"""Report Synthesizer tests — coherent report generation, citation validation, and fallbacks.
+"""Synthesizer tests: report generation, citation validation, and fallbacks.
 
 Run: .venv/Scripts/python.exe -m pytest tests/test_synthesizer.py -v
 """

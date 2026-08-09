@@ -1,18 +1,13 @@
-"""Run the golden set through the REAL pipeline and record metrics.
+"""Run the golden set through the real pipeline and record metrics.
 
-This spends real budget: every question goes through planner, search,
-verifier, and synthesizer with real LLM calls (guardrail caps still apply
-per question). The optional grounding judge spends a little more; disable
-it with --no-judge.
-
-Run from the repo root:
+Spends real budget (guardrail caps still apply per question); the grounding
+judge costs a little more, disable with --no-judge. Memory is off by default
+so runs don't touch the live store.
 
     .venv\\Scripts\\python.exe -m evaluation.run_eval
     .venv\\Scripts\\python.exe -m evaluation.run_eval --limit 3 --no-judge
 
 Each run writes evaluation/results/<timestamp>.json and prints a summary.
-Memory is OFF by default so runs don't recall or pollute the live store;
-pass --use-memory to evaluate recall behavior itself.
 """
 
 from __future__ import annotations
@@ -144,7 +139,7 @@ def main() -> None:
     items = _load_golden(args.limit)
     backend = get_search_tool().name
     if backend == "stub":
-        print("NOTE: stub search backend — keyword and honesty metrics are "
+        print("NOTE: stub search backend; keyword and honesty metrics are "
               "not meaningful without TAVILY_API_KEY.\n")
 
     results = [_evaluate_question(item, args) for item in items]

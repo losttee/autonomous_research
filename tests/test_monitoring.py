@@ -1,4 +1,4 @@
-"""Monitoring & SSE tests — log aggregation, progress events, /metrics, and streaming.
+"""Monitoring and SSE tests: log aggregation, progress events, /metrics, streaming.
 
 Run: .venv/Scripts/python.exe -m pytest tests/test_monitoring.py -v
 """
@@ -34,7 +34,7 @@ def test_aggregate_rollups_and_runs(tmp_path) -> None:
         json.dumps({"step_type": "research_done", "step_id": "rpt_2", "ts": "2026-01-02T00:00:00",
                     "latency_ms": 2000, "cost_usd": 0.01, "sections": 1, "sources": 2}),
         json.dumps({"step_type": "budget_exceeded"}),
-        "{not valid json — must be skipped",
+        "{not valid json, must be skipped",
     ]
     data = aggregate(_write_logs(tmp_path, lines))
 

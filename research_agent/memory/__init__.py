@@ -1,1 +1,1 @@
-"""memory layer — implemented per roadmap."""
+"""Memory store and vector persistence."""

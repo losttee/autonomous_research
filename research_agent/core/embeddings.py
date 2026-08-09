@@ -1,15 +1,5 @@
-"""Shared embedding client — turns text into vectors for the memory/RAG layer.
-
-Mirrors core/llm.py: one place every layer gets embeddings, cost is recorded into
-the CostTracker, and the backend can swap without touching callers.
-
-Degradation is a first-class requirement (same as the search tool's real-vs-stub
-split): the gateway is OpenAI-compatible but may not expose /embeddings. When the
-real embedding call fails, we fall back to a deterministic hashing embedding that
-runs fully offline. It is far weaker than a learned model, but it keeps cosine
-similarity meaningful for near-identical text (recall) and lets the whole memory
-layer run on a fresh checkout with no API key.
-"""
+"""Embedding client for the memory layer. When the API is unavailable it falls
+back to a deterministic hashing embedding, so memory still works offline."""
 
 from __future__ import annotations
 
@@ -28,8 +18,7 @@ if TYPE_CHECKING:
 
 _log = get_logger("core.embeddings")
 
-# Dimension of the offline fallback vectors. Small is fine — it only needs to
-# separate near-identical text from unrelated text for recall.
+# Small on purpose: only needs to separate near-identical from unrelated text.
 _HASH_DIM = 256
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -40,8 +29,7 @@ def _tokenize(text: str) -> list[str]:
 
 
 def _hash_embedding(text: str, dim: int = _HASH_DIM) -> list[float]:
-    """Deterministic offline embedding: hash each token into a bucket (bag of words),
-    then L2-normalize. No network, no API key — a stub so memory works offline."""
+    """Offline fallback: bag-of-hashed-tokens, L2-normalized."""
     vec = [0.0] * dim
     for tok in _tokenize(text):
         h = int(hashlib.md5(tok.encode("utf-8")).hexdigest(), 16)
@@ -63,7 +51,7 @@ class EmbeddingClient:
             base_url=self._settings.llm_base_url,
             timeout=float(self._settings.request_timeout_sec),
         )
-        # Once the real endpoint fails, stop hammering it for the rest of the run.
+        # After one failure, stay on the fallback for the rest of the run.
         self._degraded = False
 
     @property
@@ -75,8 +63,7 @@ class EmbeddingClient:
         texts: list[str],
         tracker: Optional["CostTracker"] = None,
     ) -> list[list[float]]:
-        """Embed a batch of texts. Falls back to the offline hashing embedding on
-        any API failure so the memory layer never crashes a research run."""
+        """Embed a batch of texts; falls back to the hash embedding on API failure."""
         if not texts:
             return []
         if not self._degraded and self._settings.llm_api_key:
@@ -87,7 +74,7 @@ class EmbeddingClient:
                         self._model, resp.usage.prompt_tokens or 0, 0
                     )
                 return [item.embedding for item in resp.data]
-            except Exception as exc:  # SDK raises many subclasses; degrade uniformly
+            except Exception as exc:
                 self._degraded = True
                 _log.warning(
                     "embedding call failed; using offline hashing fallback",
@@ -107,7 +94,7 @@ _client: Optional[EmbeddingClient] = None
 
 
 def get_embedding_client() -> EmbeddingClient:
-    """Singleton embedding client — reuse one HTTP connection pool per process."""
+    """Singleton."""
     global _client
     if _client is None:
         _client = EmbeddingClient()

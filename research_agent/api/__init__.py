@@ -1,1 +1,1 @@
-"""api layer — implemented per roadmap."""
+"""FastAPI service."""

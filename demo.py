@@ -1,4 +1,4 @@
-"""Smoke test — verify the core foundation runs.
+"""Smoke test for the core foundation.
 
 Run: py demo.py
 Confirms: (1) contracts/config/logger import OK, (2) a Plan -> SubTaskResult
@@ -61,7 +61,7 @@ def main() -> None:
     report = FinalReport(
         question=plan.question,
         plan_id=plan.plan_id,
-        recommendation="Not enough data to recommend yet — only plan A premium is known.",
+        recommendation="Not enough data to recommend yet, only plan A premium is known.",
         sections=[
             ReportSection(
                 heading="Premium",

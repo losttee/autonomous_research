@@ -1,13 +1,7 @@
 """Planner: decompose a question into a Plan of parallelizable sub-tasks.
 
-Uses the strong PLANNER_MODEL (the main cost lever — spend the expensive model here,
-cheap models on the repeated worker/verifier calls) to break the question into
-independent sub-tasks with explicit dependencies, so the executor can run
-independent batches in parallel.
-
-Degradation is a first-class requirement: if the LLM errors or returns malformed
-output, fall back to the trivial single-sub-task plan instead of crashing. A partial
-or shallow plan still lets the pipeline return a report.
+If the LLM errors or returns malformed output, fall back to a trivial
+single-sub-task plan so the pipeline still runs.
 """
 
 from __future__ import annotations
@@ -24,7 +18,7 @@ _log = get_logger("planner")
 _SYSTEM = (
     "You are a research planner. Break a research question into a small set of "
     "independent, concrete sub-tasks. Available tools: 'web' (internet search), "
-    "'calculator' (exact arithmetic — assign it whenever numbers must be "
+    "'calculator' (exact arithmetic; use it whenever numbers must be "
     "computed), and 'documents' (internal files / knowledge base). Assign one "
     "tool per sub-task. Prefer 2-5 sub-tasks. Only add a dependency when a "
     "sub-task genuinely needs an earlier one's result. Return STRICT JSON only."

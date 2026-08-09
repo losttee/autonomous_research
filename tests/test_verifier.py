@@ -1,4 +1,4 @@
-"""Verifier tests — claim verification: LLM entailment, reliability blending,
+"""Verifier tests: LLM entailment, reliability blending,
 and contradiction detection.
 
 Uses a FakeLLM so tests are deterministic and need no API key or network.

@@ -1,4 +1,8 @@
-"""Core: data contracts, config, logging — the foundation of every layer."""
+"""Core: data contracts, config, logging.
+
+Does not re-export the pipeline or any layer, so this package stays cheap to
+import and free of import cycles.
+"""
 
 from research_agent.core.config import Settings, get_settings
 from research_agent.core.contracts import (
@@ -16,14 +20,10 @@ from research_agent.core.contracts import (
 )
 from research_agent.core.embeddings import EmbeddingClient, get_embedding_client
 from research_agent.core.logging import get_logger, log_step
-from research_agent.core.pipeline import run_research
-from research_agent.planner import plan_question
 
 __all__ = [
     "Settings",
     "get_settings",
-    "run_research",
-    "plan_question",
     "EmbeddingClient",
     "get_embedding_client",
     "Claim",

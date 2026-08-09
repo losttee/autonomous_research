@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Metrics — Autonomous Research</title>
+  <title>Metrics - Autonomous Research</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
@@ -56,7 +56,7 @@
     <header class="hero">
       <div class="badge-pill"><span class="dot"></span> Monitoring</div>
       <h1>Cost &amp; <span class="grad">performance</span></h1>
-      <p class="lead">Every pipeline stage is measured straight from the structured logs — tokens, latency and cost for planning, search, verification and synthesis.</p>
+      <p class="lead">Every pipeline stage is measured straight from the structured logs: tokens, latency and cost for planning, search, verification and synthesis.</p>
     </header>
 
     <div id="content" class="hidden" style="display:flex;flex-direction:column;gap:16px;">
@@ -96,11 +96,11 @@
         const h = Math.max((v / max) * (H - 6), 0.8);
         return `<rect x="${(i * bw + bw * 0.15).toFixed(2)}" y="${(H - h).toFixed(2)}"
           width="${(bw * 0.7).toFixed(2)}" height="${h.toFixed(2)}" rx="0.5">
-          <title>${esc(runs[i].report_id)} — $${v.toFixed(4)}</title></rect>`;
+          <title>${esc(runs[i].report_id)} - $${v.toFixed(4)}</title></rect>`;
       }).join("");
       return `<div class="bars"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
         role="img" aria-label="Cost per run">${bars}</svg>
-        <div class="bars-note">One bar per run, newest first. Height = cost — hover for exact numbers.</div></div>`;
+        <div class="bars-note">One bar per run, newest first. Height = cost, hover for exact numbers.</div></div>`;
     }
 
     function render(data) {

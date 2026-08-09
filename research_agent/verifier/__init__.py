@@ -1,1 +1,1 @@
-"""verifier layer — implemented per roadmap."""
+"""Claim grounding and verification."""

@@ -1,8 +1,6 @@
 """Aggregate JSON-lines pipeline logs into dashboard-ready numbers.
 
-Pure functions over a file — no server state, trivially testable. Corrupt or
-partial lines are skipped silently: the dashboard must stay up no matter what
-ends up in the log.
+Pure functions over a file; corrupt lines are skipped.
 """
 
 from __future__ import annotations

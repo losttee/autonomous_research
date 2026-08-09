@@ -1,13 +1,8 @@
-"""Memory store — the business layer over the vector store + embedding client.
+"""Memory store over the vector store + embedding client.
 
-Two key roles:
-  1. Recall: cache a whole FinalReport keyed by its question; on a near-identical
-     question later, return it instead of paying to research again.
-  2. Internal RAG: expose past verified claims as MEMORY SourceRefs so the executor
-     can cite prior findings alongside fresh web results.
-
-Everything degrades: if embeddings/store fail, calls become no-ops (recall misses,
-RAG returns nothing) and a research run proceeds exactly as if memory were off.
+Two roles: recall a cached FinalReport for a near-identical question, and
+surface past verified claims as MEMORY sources (internal RAG). On any error
+the calls degrade to no-ops.
 """
 
 from __future__ import annotations
@@ -34,8 +29,7 @@ _log = get_logger("memory")
 
 _STORE_FILENAME = "memory.json"
 
-# A memory this similar to an existing one adds nothing — skip the write so
-# re-running the same topics doesn't bloat the store with duplicates.
+# Skip writes when a near-identical entry exists.
 _DEDUP_THRESHOLD = 0.98
 
 
@@ -58,16 +52,15 @@ class MemoryStore:
     ) -> None:
         self._settings = settings if settings is not None else get_settings()
         self._embedder = embedder if embedder is not None else get_embedding_client()
-        # NOTE: `is None`, not `or` — VectorStore defines __len__, so an empty
-        # injected store is falsy and `store or ...` would silently discard it.
-        # TODO: pure-Python vector search is fast enough for <10k claims; swap with Redis/Chroma if scaled.
+        # `is None` on purpose: VectorStore defines __len__, so an empty
+        # injected store is falsy and `store or ...` would drop it.
         path = f"{self._settings.chroma_persist_dir.rstrip('/')}/{_STORE_FILENAME}"
         self._store = store if store is not None else VectorStore(path)
         self._lock = threading.Lock()
 
     @property
     def vector_store(self) -> VectorStore:
-        """The underlying store — exposed for offline tooling like the probe."""
+        """The underlying store (for offline tooling)."""
         return self._store
 
     def _is_duplicate(self, vector: list[float], kind: str) -> bool:
@@ -82,8 +75,7 @@ class MemoryStore:
     ) -> None:
         """Persist a report keyed by its question so a later run can reuse it.
 
-        Near-identical questions already remembered are skipped — re-running the
-        same topic must not pile up duplicate copies.
+        Near-identical questions already remembered are skipped.
         """
         try:
             vec = self._embedder.embed_one(report.question, tracker=tracker)
@@ -101,7 +93,7 @@ class MemoryStore:
                     "report": report.model_dump(mode="json"),
                 },
             )
-        except Exception as exc:  # memory is best-effort; never break the run
+        except Exception as exc:
             _log.warning(
                 "remember_report failed",
                 extra={"extra_fields": {"error": str(exc)}},
@@ -196,11 +188,8 @@ class MemoryStore:
     ) -> list[SourceRef]:
         """Return past claims relevant to the query as MEMORY SourceRefs.
 
-        These are grounded (they were supported when stored), so the executor can
-        cite them alongside fresh web results. Freshness applies: entries older
-        than MEMORY_TTL_DAYS are dropped, and surviving entries have their
-        reliability decayed by up to half as they approach the TTL — a memory
-        is never served at full trust right at its expiry horizon.
+        Entries older than MEMORY_TTL_DAYS are dropped; the rest have their
+        reliability decayed by up to half as they approach the TTL.
         Best-effort: any error -> []."""
         try:
             vec = self._embedder.embed_one(query, tracker=tracker)
@@ -247,7 +236,7 @@ class MemoryStore:
 
 
 class _NullMemoryStore:
-    """No-op stand-in when memory can't initialize — every call degrades safely."""
+    """No-op stand-in when memory can't initialize."""
 
     def remember_report(self, report, tracker=None) -> None:  # noqa: D401
         return None

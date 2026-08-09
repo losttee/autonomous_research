@@ -1,1 +1,1 @@
-"""guardrail layer — implemented per roadmap."""
+"""Budget and cost enforcement."""

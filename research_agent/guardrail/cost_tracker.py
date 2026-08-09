@@ -1,12 +1,7 @@
 """Guardrail: cost + budget tracking for a single research request.
 
-Plugged in early on purpose: as soon as LLM + web search are wired up,
-every run costs real money. A bug that loops (planner calling tools forever) can
-burn the whole budget overnight. This tracker is the fuse.
-
-It enforces hard caps on: number of LLM calls, number of tool calls, total tokens,
-total USD, and wall-clock time. When any cap is exceeded, callers should stop and
-return partial results instead of crashing.
+Enforces hard caps on LLM calls, tool calls, tokens, USD and wall-clock time.
+When a cap is exceeded, callers stop and return partial results.
 """
 
 from __future__ import annotations
@@ -20,7 +15,7 @@ from research_agent.core.logging import get_logger, log_step
 
 
 class BudgetExceeded(Exception):
-    """Raised when a hard cap is hit. Callers catch this to stop gracefully."""
+    """Raised when a hard cap is hit."""
 
     def __init__(self, reason: str, snapshot: "CostSnapshot") -> None:
         super().__init__(reason)
@@ -30,7 +25,7 @@ class BudgetExceeded(Exception):
 
 @dataclass(frozen=True)
 class CostSnapshot:
-    """Immutable view of current spend — safe to attach to logs and reports."""
+    """Immutable view of current spend."""
 
     llm_calls: int
     tool_calls: int

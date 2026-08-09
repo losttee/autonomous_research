@@ -1,14 +1,7 @@
-"""Data contracts for the whole system.
+"""Shared data models for all layers: planner, executor, verifier, synthesizer.
 
-This is the foundation every layer depends on (Planner -> Executor -> Verifier
--> Synthesizer). All data flowing between layers passes through the models here,
-so every piece of data always carries traceability metadata: source_id,
-retrieved_at, confidence.
-
-Principles:
-- Do not store raw tool output at the working layer; store structured summaries.
-- Every claim must be traceable to a source -> enables grounded generation + citation.
-- confidence is always present so the Synthesizer can report certainty levels.
+Layers exchange only these models, so claims keep their source ids and
+verifier output all the way into the final report.
 """
 
 from __future__ import annotations
@@ -45,11 +38,7 @@ class SourceType(str, Enum):
 
 
 class SourceRef(BaseModel):
-    """A retrieved data source. This is the base unit of citation.
-
-    Every Claim must point back to at least one SourceRef via source_id to
-    guarantee grounded generation: no source, no assertion.
-    """
+    """A retrieved source; the unit every citation points to."""
 
     source_id: str = Field(default_factory=lambda: _new_id("src"))
     type: SourceType
@@ -57,7 +46,7 @@ class SourceRef(BaseModel):
     url: Optional[str] = None
     snippet: str = Field(default="", description="Original text span used for grounding checks")
     retrieved_at: datetime = Field(default_factory=_utcnow)
-    # Source reliability score (to filter weak sources). None = not yet scored.
+    # None = not scored yet.
     reliability: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
     @field_validator("url")
@@ -67,19 +56,15 @@ class SourceRef(BaseModel):
 
 
 class Claim(BaseModel):
-    """A single factual assertion that has (or will be) grounding-verified.
-
-    The Verifier fills in supported/confidence after running the entailment check.
-    supporting_source_ids point back to the SourceRefs that support this claim.
-    """
+    """One factual assertion; the verifier fills supported/confidence."""
 
     claim_id: str = Field(default_factory=lambda: _new_id("clm"))
     text: str
     supporting_source_ids: list[str] = Field(default_factory=list)
-    # Result from Verifier.verify_claim(); None = not yet verified.
+    # None = not verified yet.
     supported: Optional[bool] = None
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-    # Note when sources conflict — must never be hidden, must appear in the report.
+    # Set when sources conflict; surfaced in the final report.
     contradiction_note: Optional[str] = None
 
     @property
@@ -88,11 +73,11 @@ class Claim(BaseModel):
 
 
 class SubTask(BaseModel):
-    """A unit of work produced by the Planner. Independent SubTasks run in parallel."""
+    """A unit of work from the planner; independent tasks run in parallel."""
 
     sub_task_id: str = Field(default_factory=lambda: _new_id("task"))
     description: str
-    # IDs of sub-tasks that must finish first (used to decide what can run in parallel).
+    # Ids of tasks that must finish first.
     depends_on: list[str] = Field(default_factory=list)
     tool_hint: Optional[SourceType] = Field(
         default=None, description="Hint for which tool to use; Executor may override"
@@ -100,11 +85,7 @@ class SubTask(BaseModel):
 
 
 class SubTaskResult(BaseModel):
-    """Structured result of one sub-task — stored in working memory.
-
-    Contains NO raw tool output; only distilled claims + sources.
-    This is what the Synthesizer pulls, to avoid context overflow.
-    """
+    """Result of one sub-task: distilled claims + sources, no raw tool output."""
 
     sub_task_id: str
     status: SubTaskStatus = SubTaskStatus.DONE
@@ -127,10 +108,8 @@ class PlannerStrategy(str, Enum):
 
 
 class Plan(BaseModel):
-    """Plan produced by the Planner. Log the original plan to review 'planner misread'.
-
-    revision > 0 means it has been re-planned. previous_plan_id chains the revisions.
-    """
+    """Plan from the planner. revision > 0 means it was re-planned;
+    previous_plan_id chains the revisions."""
 
     plan_id: str = Field(default_factory=lambda: _new_id("plan"))
     question: str
@@ -148,7 +127,7 @@ class Plan(BaseModel):
         remaining = list(self.sub_tasks)
         while remaining:
             ready = [t for t in remaining if all(d in done for d in t.depends_on)]
-            if not ready:  # cyclic or missing dependency -> avoid infinite loop
+            if not ready:  # cyclic/missing dependency; bail out instead of looping
                 batches.append(remaining)
                 break
             batches.append(ready)
@@ -174,12 +153,8 @@ class ReportSection(BaseModel):
 
 
 class FinalReport(BaseModel):
-    """Final output — matches the required contract from Part 0 of the design.
-
-    Includes: main recommendation, step-by-step reasoning, citations, confidence,
-    and an explicit section stating what the agent is unsure about / missing data
-    for / where sources conflict.
-    """
+    """Final output: recommendation, cited sections, confidence, and explicit
+    uncertainties/contradictions."""
 
     report_id: str = Field(default_factory=lambda: _new_id("rpt"))
     question: str
@@ -188,7 +163,6 @@ class FinalReport(BaseModel):
     sections: list[ReportSection] = Field(default_factory=list)
     all_sources: list[SourceRef] = Field(default_factory=list)
     overall_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-    # Transparency — required by the contract:
     uncertainties: list[str] = Field(
         default_factory=list, description="What the agent is unsure of / could not find data for"
     )

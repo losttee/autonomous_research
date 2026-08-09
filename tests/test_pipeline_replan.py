@@ -1,4 +1,4 @@
-"""Pipeline replan tests — the MAX_REPLAN loop and budget boundaries.
+"""Pipeline replan tests: the MAX_REPLAN loop and budget boundaries.
 
 Run: .venv/Scripts/python.exe -m pytest tests/test_pipeline_replan.py -v
 """

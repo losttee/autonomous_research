@@ -1,13 +1,8 @@
 """Executor: run a single sub-task through a tool and return a SubTaskResult.
 
-After web search, the WORKER_MODEL distills the retrieved sources
-into concrete claims, each grounded to the source_ids it came from. If the
-LLM is unavailable or errors, it falls back to a deterministic heuristic (one claim per
-source snippet) so the sub-task still returns something usable.
-
-The executor never raises for tool/LLM errors — it encodes them in the result so
-the pipeline can return partial results. Real supported/confidence verification
-arrives in the Verifier step; here claims carry an initial confidence.
+The worker model distills retrieved sources into claims grounded to their
+source ids; if the LLM fails, fall back to one claim per source snippet.
+Tool/LLM errors are encoded in the result (status/error), never raised.
 """
 
 from __future__ import annotations
@@ -130,8 +125,7 @@ def _augment_with_memory(
 ) -> list[SourceRef]:
     """Append relevant past claims (as MEMORY SourceRefs) to the web sources.
 
-    Disabled via USE_MEMORY. Never raises — memory is best-effort, so any failure
-    just leaves the web sources untouched."""
+    Disabled via USE_MEMORY. Best-effort: on failure keep the web sources."""
     from research_agent.core.config import get_settings
 
     if not get_settings().use_memory:
@@ -178,11 +172,7 @@ def run_subtask(
     max_results: int = 5,
     llm: Optional[LLMClient] = None,
 ) -> SubTaskResult:
-    """Execute one sub-task. Never raises for tool errors — encodes them in the result.
-
-    Budget is checked before the tool call; if exceeded, the sub-task is marked
-    SKIPPED so the pipeline can still return partial results.
-    """
+    """Execute one sub-task; tool errors are recorded in the result, not raised."""
     tool = _select_tool(task, search_tool, llm, tracker)
     start = time.monotonic()
 
@@ -198,7 +188,7 @@ def run_subtask(
     try:
         sources = tool.search(task.description, max_results=max_results)
         tracker.record_tool_call()
-    except Exception as exc:  # defensive: a tool must not crash the whole run
+    except Exception as exc:
         _log.warning(
             "tool crashed",
             extra={"extra_fields": {"sub_task_id": task.sub_task_id, "error": str(exc)}},
@@ -209,8 +199,7 @@ def run_subtask(
             error=str(exc),
         )
 
-    # Internal RAG: past verified claims become extra sources for this sub-task,
-    # cited alongside fresh web results. Best-effort — memory must not break a run.
+    # Add recalled claims as extra sources (internal RAG). Best-effort.
     sources = _augment_with_memory(task, sources, tracker)
 
     claims = _extract_claims(task, sources, tracker, llm)

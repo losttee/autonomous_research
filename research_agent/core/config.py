@@ -1,9 +1,7 @@
-"""Global configuration — read from environment variables / .env.
+"""Settings loaded from environment variables / .env.
 
-Model tier: the planner uses a strong (expensive) model only for planning/re-planning;
-workers + verifier use a cheap model because they run many times. This is the main
-cost lever: token spend explains most of the quality variance, so concentrate the
-expensive model where it creates the most value (planning) and cheapen the repeated work.
+The planner runs on the strong model; workers/verifier run on the cheap one,
+since they are called many times per request.
 """
 
 from __future__ import annotations
@@ -13,13 +11,8 @@ from functools import lru_cache
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Price in USD per 1M tokens (input, output). Update when pricing changes.
-# Used by the cost_tracker to estimate cost before and during a run.
-# NOTE: the current endpoint is an OpenAI-compatible gateway; pricing for the
-# self-hosted models is unknown, so it is set to 0.0 (cost tracking will report $0
-# for them). gpt-4o pricing kept for reference. Set real prices per deployment
-# via the MODEL_PRICING env var (see Settings.model_pricing) instead of editing
-# this table.
+# USD per 1M tokens (input, output), used for cost estimates. Gateway model
+# prices vary per deployment; override them with the MODEL_PRICING env var.
 MODEL_PRICING: dict[str, tuple[float, float]] = {
     "gpt-4o": (2.5, 10.0),
     "llama-2-13b": (0.0, 0.0),
@@ -29,11 +22,7 @@ MODEL_PRICING: dict[str, tuple[float, float]] = {
 
 @lru_cache(maxsize=1)
 def _parse_pricing(raw: str) -> dict[str, tuple[float, float]]:
-    """Parse "model:in_price:out_price,model:in_price:out_price" (USD/1M tokens).
-
-    Malformed entries are skipped silently — a bad price line must never break
-    a research run; that model just falls back to the built-in table.
-    """
+    """Parse "model:in:out,model:in:out" price overrides; skips bad entries."""
     out: dict[str, tuple[float, float]] = {}
     for chunk in raw.split(","):
         parts = [p.strip() for p in chunk.split(":")]
@@ -52,8 +41,7 @@ class Settings(BaseSettings):
     )
 
     # --- LLM (OpenAI-compatible endpoint) ---
-    # The gateway speaks the OpenAI API, so we use the OpenAI SDK with a custom
-    # base_url. api_key + base_url are shared across all model roles here.
+    # OpenAI-compatible gateway; one key/base_url for every model role.
     llm_api_key: str = Field(default="", alias="LLM_API_KEY")
     llm_base_url: str = Field(default="https://api.pinkyne.com/v1", alias="LLM_BASE_URL")
     planner_model: str = Field(default="gpt-4o", alias="PLANNER_MODEL")
@@ -68,14 +56,11 @@ class Settings(BaseSettings):
     max_usd_budget: float = Field(default=1.5, alias="MAX_USD_BUDGET")
     request_timeout_sec: int = Field(default=180, alias="REQUEST_TIMEOUT_SEC")
     max_replan: int = Field(default=3, alias="MAX_REPLAN")
-    # Adversarial second pass on the strongest claims — an extra LLM round that
-    # tries to refute each one. Costs more; off by default.
+    # Extra verifier round that tries to refute strong claims. Costs more.
     adversarial_verify: bool = Field(default=False, alias="ADVERSARIAL_VERIFY")
 
     # --- Cost ---
-    # Overrides the MODEL_PRICING table above without a code change, format
-    # "model:in_price:out_price,..." (USD per 1M tokens). Set real prices for
-    # gateway models here so cost tracking reports real dollars.
+    # Price overrides, format "model:in:out,..." (USD per 1M tokens).
     model_pricing: str = Field(default="", alias="MODEL_PRICING")
 
     # --- Web search tool ---
@@ -92,27 +77,21 @@ class Settings(BaseSettings):
         default="text-embedding-3-small", alias="EMBEDDING_MODEL"
     )
     use_memory: bool = Field(default=True, alias="USE_MEMORY")
-    # High threshold: only reuse a past report when the question is near-identical,
-    # so we don't serve a stale answer to a merely-similar question.
+    # Only reuse a cached report when the question is near-identical.
     memory_recall_threshold: float = Field(
         default=0.92, alias="MEMORY_RECALL_THRESHOLD"
     )
-    # Memories older than this are never served as evidence (recall misses,
-    # RAG claims dropped) — prices and figures go stale. 0 disables expiry.
+    # Memories older than this are dropped. 0 disables expiry.
     memory_ttl_days: int = Field(default=30, alias="MEMORY_TTL_DAYS")
 
     # --- Logging ---
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     log_json: bool = Field(default=True, alias="LOG_JSON")
-    # JSON-lines file every pipeline step is appended to; the monitoring
-    # dashboard aggregates from it. Empty string disables the file sink.
+    # JSON-lines log the monitoring dashboard reads. Empty disables it.
     log_file: str = Field(default="./data/logs/pipeline.jsonl", alias="LOG_FILE")
 
     def price_for(self, model: str) -> tuple[float, float]:
-        """Return (input price, output price) USD/1M tokens; (0,0) if model unknown.
-
-        The MODEL_PRICING env override wins over the built-in table.
-        """
+        """(input, output) price in USD/1M tokens; env override wins, else table."""
         overrides = _parse_pricing(self.model_pricing)
         if model in overrides:
             return overrides[model]
@@ -127,7 +106,7 @@ _settings: Settings | None = None
 
 
 def get_settings() -> Settings:
-    """Singleton — load once, reuse across the whole system."""
+    """Process-wide singleton."""
     global _settings
     if _settings is None:
         _settings = Settings()

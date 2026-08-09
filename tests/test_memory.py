@@ -1,4 +1,4 @@
-"""Memory & Vector Store tests — recall, internal RAG, and offline fallbacks.
+"""Memory and vector store tests: recall, internal RAG, and offline fallbacks.
 
 Run: .venv/Scripts/python.exe -m pytest tests/test_memory.py -v
 """
@@ -21,7 +21,7 @@ from research_agent.memory.vector_store import VectorStore, _cosine
 
 
 class FakeEmbedder:
-    """Deterministic embedder using the offline hashing embedding — no network."""
+    """Deterministic embedder using the offline hashing embedding (no network)."""
 
     def embed(self, texts, tracker=None):
         return [_hash_embedding(t) for t in texts]

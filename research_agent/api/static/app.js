@@ -159,7 +159,7 @@ async function run() {
   const question = qEl.value.trim();
   if (question.length < 3) {
     statusEl.className = "status error";
-    statusEl.textContent = "Add a little more detail — 3 characters minimum.";
+    statusEl.textContent = "Add a little more detail; 3 characters minimum.";
     statusEl.classList.remove("hidden");
     return;
   }
@@ -174,7 +174,7 @@ async function run() {
     try {
       data = await runStream(question);
     } catch (streamErr) {
-      // Streaming unavailable (older server) or broke before a result —
+      // Streaming unavailable (older server) or broke before a result;
       // one classic retry still gets the answer.
       setProgress("Gathering and checking sources…");
       data = await runClassic(question);
@@ -216,6 +216,6 @@ chipsEl.addEventListener("click", (e) => {
       `${(d.avg_run_latency_ms / 1000).toFixed(1)}s avg runtime`;
     el.classList.remove("hidden");
   } catch {
-    // dashboard data is optional on the landing page — stay silent
+    // dashboard data is optional on the landing page; stay silent
   }
 })();

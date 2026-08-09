@@ -1,14 +1,8 @@
-"""Calculator tool — exact arithmetic as a grounded source.
+"""Calculator tool.
 
-Financial/math figures must never come from an LLM guessing: the model only
-*extracts* the expression from the question (pattern recognition), the math
-itself runs through a restricted AST evaluator, and the result is returned as
-a SourceRef(type=CALCULATOR) with reliability 1.0 — cited like any other
-source by the executor/verifier/synthesizer.
-
-Degradation (same rule as every layer): if the extraction LLM is unavailable,
-a regex fallback tries to find a plain arithmetic expression in the question;
-if nothing computable exists, the tool returns [] and the sub-task degrades.
+The LLM only extracts the expression from the question; the math runs through
+a restricted AST evaluator, so results are exact. Output is a CALCULATOR
+SourceRef with reliability 1.0. Without a usable expression the tool returns [].
 """
 
 from __future__ import annotations
@@ -31,8 +25,7 @@ class CalcError(ValueError):
     """Raised when an expression is unsafe or cannot be evaluated."""
 
 
-# Only pure arithmetic survives validation — no names, calls, attributes,
-# subscripts, strings. Anything else is rejected before eval ever sees it.
+# Only pure arithmetic is allowed; everything else is rejected before eval.
 _ALLOWED_NODES = (
     ast.Expression,
     ast.BinOp,
@@ -49,8 +42,7 @@ _ALLOWED_NODES = (
     ast.UAdd,
 )
 
-# 9**9**9 would try to materialize hundreds of millions of digits; exponents
-# must be small literal numbers.
+# Cap exponents; 9**9**9 would try to build a huge integer.
 _MAX_EXPONENT = 64
 
 
@@ -84,7 +76,7 @@ def safe_eval(expression: str) -> float:
                 raise CalcError("exponent must be a small literal number")
 
     try:
-        result = eval(  # noqa: S307 — AST-whitelisted arithmetic only
+        result = eval(  # noqa: S307 - AST-whitelisted arithmetic only
             compile(tree, "<calculator>", "eval"), {"__builtins__": {}}, {}
         )
     except ZeroDivisionError as exc:
@@ -103,7 +95,7 @@ def _format(value: float) -> str:
 
 _EXTRACT_SYSTEM = (
     "You extract ONE arithmetic expression from a question. You never compute "
-    "results — you only translate words into math. Return STRICT JSON only."
+    "results; you only translate words into math. Return STRICT JSON only."
 )
 
 _EXTRACT_TEMPLATE = """Question:
@@ -157,7 +149,7 @@ class CalculatorTool:
                 temperature=0.0,
                 tracker=self._tracker,
             )
-        except Exception as exc:  # defensive: tool errors never crash a run
+        except Exception as exc:
             _log.warning(
                 "calculator extraction fell back to regex",
                 extra={"extra_fields": {"error": str(exc)}},

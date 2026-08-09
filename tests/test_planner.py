@@ -1,4 +1,4 @@
-"""Planner tests — decomposition, parallel execution, and graceful fallback.
+"""Planner tests: decomposition, parallel execution, and fallback.
 
 Uses a FakeLLM so tests are deterministic and need no API key or network.
 Run: .venv/Scripts/python.exe -m pytest tests/test_planner.py -v

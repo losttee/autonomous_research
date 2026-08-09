@@ -1,4 +1,4 @@
-"""Verifier depth tests — claim dedup, cross-sub-task contradictions, and the
+"""Verifier depth tests: claim dedup, cross-sub-task contradictions, and the
 adversarial second pass. Deterministic (FakeLLM), no network, no API key.
 
 Run: .venv\\Scripts\\python.exe -m pytest tests/test_verifier_depth.py -v
@@ -156,8 +156,7 @@ def test_flagged_conflicts_surface_in_the_report() -> None:
     ])
     report = synthesize(plan, results)
 
-    # Both sides of the disagreement must appear — the report shows the
-    # conflict instead of picking a winner.
+    # Both sides of the disagreement must appear in the report.
     assert len(report.contradictions) == 2
     joined = " | ".join(report.contradictions)
     assert "$15" in joined and "$10" in joined

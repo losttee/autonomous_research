@@ -1,14 +1,7 @@
-"""Executor: web search tool.
+"""Web search backends behind one SearchTool interface.
 
-Returns a list[SourceRef] for a query. Two implementations sit behind one fixed
-interface (SearchTool) so the rest of the system never changes when the backend
-swaps:
-  - TavilySearchTool: real search via the Tavily API (needs TAVILY_API_KEY).
-  - StubSearchTool: offline deterministic results, so the end-to-end slice and
-    tests run without any API key or network.
-
-The factory get_search_tool() picks the real one when a key is present, else the
-stub. This keeps the pipeline runnable offline on a fresh checkout.
+TavilySearchTool is the real API; StubSearchTool is the offline stand-in used
+when no key is configured, so the pipeline runs without network.
 """
 
 from __future__ import annotations
@@ -36,11 +29,7 @@ class SearchTool(Protocol):
 
 
 class StubSearchTool:
-    """Offline deterministic search — no network, for tests and no-key runs.
-
-    Produces plausible-looking SourceRefs derived from the query so the slice can
-    prove citations flow end-to-end without external calls.
-    """
+    """Offline deterministic search for tests and no-key runs."""
 
     name = "stub"
 
@@ -88,7 +77,6 @@ class TavilySearchTool:
             resp.raise_for_status()
             data = resp.json()
         except (httpx.HTTPError, ValueError) as exc:
-            # Network/parse failure must not crash the pipeline; return empty and log.
             _log.warning(
                 "tavily search failed",
                 extra={"extra_fields": {"query": query[:80], "error": str(exc)}},

@@ -1,1 +1,1 @@
-"""synthesizer layer — implemented per roadmap."""
+"""Report synthesis."""

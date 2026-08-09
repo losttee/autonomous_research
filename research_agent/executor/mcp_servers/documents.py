@@ -1,13 +1,9 @@
-"""Document tool — internal files as INTERNAL_RAG sources.
+"""Document tool: internal files as INTERNAL_RAG sources.
 
-Searches a local folder (DOCUMENT_ROOT, default ./data/documents) for text
-files (.md, .txt, .json, .csv, ...) and returns the best keyword matches as
-SourceRefs the executor can cite alongside web results. Pure-Python scoring
-(token overlap), no new dependencies; PDF support needs a parsing library and
-is deliberately out of scope until then.
-
-Security: results only ever come from files under the resolved root — the
-tool cannot be pointed outside it. A missing or empty root degrades to [].
+Searches DOCUMENT_ROOT for text files (.md/.txt/.json/.csv/...) by keyword
+overlap and returns the best matches as SourceRefs. Only files under the
+resolved root are readable; a missing root returns []. PDF needs a parsing
+library and is not supported yet.
 """
 
 from __future__ import annotations
@@ -29,8 +25,7 @@ _TEXT_EXTENSIONS = {".md", ".txt", ".json", ".csv", ".tsv", ".log", ".rst"}
 _MAX_READ_CHARS = 200_000
 _SNIPPET_CHARS = 500
 
-# Internal documents are ours to trust more than arbitrary web pages, but they
-# can still be stale — high, not perfect.
+# Internal docs: trustworthy but possibly stale.
 _INTERNAL_RELIABILITY = 0.7
 
 
@@ -81,7 +76,7 @@ class DocumentTool:
                 continue
             try:
                 if root_resolved not in path.resolve().parents:
-                    continue  # symlink escape guard — stay inside the root
+                    continue  # stay inside the root
                 text = path.read_text(encoding="utf-8", errors="ignore")[:_MAX_READ_CHARS]
             except OSError:
                 continue

@@ -1,12 +1,4 @@
-"""FastAPI service — exposes the research pipeline over HTTP.
-
-Endpoints:
-    GET  /                Web interface
-    GET  /monitoring      Cost/latency dashboard
-    GET  /health          Liveness check
-    GET  /metrics         Aggregated JSON behind the dashboard
-    POST /research        Accept a question, return a FinalReport as JSON
-    POST /research/stream Same, but streams SSE progress events while it runs
+"""FastAPI service exposing the research pipeline over HTTP.
 
 Run:
 
@@ -98,12 +90,9 @@ def _sse(event: str, data: dict[str, Any]) -> str:
 
 @app.post("/research/stream")
 def research_stream(req: ResearchRequest) -> StreamingResponse:
-    """Like /research, but pushes progress events over SSE while the run works.
-
-    Events: `progress` (one per pipeline stage), then exactly one terminal
-    event — `result` with the same payload shape as /research, or `error`.
-    Built on starlette's plain StreamingResponse on purpose: SSE is just
-    framed text, so no extra dependency is needed.
+    """Like /research, but pushes `progress` events over SSE while the run
+    works, ending with one terminal event: `result` (same payload as
+    /research) or `error`.
     """
     events: "queue.Queue[Optional[tuple[str, dict[str, Any]]]]" = queue.Queue()
 
@@ -123,7 +112,7 @@ def research_stream(req: ResearchRequest) -> StreamingResponse:
                 elapsed_sec=snap.elapsed_sec,
             ).model_dump(mode="json")
             events.put(("result", payload))
-        except Exception as exc:  # surface any failure as an SSE event, never a hang
+        except Exception as exc:
             events.put(("error", {"message": str(exc)}))
         finally:
             events.put(None)  # sentinel: closes the stream

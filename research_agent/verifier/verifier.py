@@ -1,16 +1,8 @@
-"""Verifier: grounding check for extracted claims against cited sources.
+"""Verifier: check each claim against its cited sources.
 
-The executor produces claims with an unverified confidence of 0.0. This layer is
-where each claim earns its confidence: for every claim we ask the cheap
-VERIFIER_MODEL whether the cited sources actually entail the claim, and record
-
-  - supported:   True/False  (is the claim entailed by its sources?)
-  - confidence:  0.0-1.0      (how strongly, blended with source reliability)
-  - contradiction_note: filled when sources disagree with the claim
-
-Degradation is a first-class requirement (same as planner/executor): if the LLM
-errors or returns malformed output, fall back to a deterministic heuristic based
-on source reliability so the claim still gets a sensible, non-zero confidence.
+For every claim the verifier model decides entailment and sets supported,
+confidence (blended with source reliability) and contradiction_note. On LLM
+error or malformed output, fall back to a reliability-based heuristic.
 """
 
 from __future__ import annotations
@@ -121,8 +113,7 @@ def verify_claim(
 ) -> Claim:
     """Verify one claim against its cited sources; mutate + return it.
 
-    Never raises for LLM errors — falls back to the reliability heuristic so the
-    claim always ends up with a sensible confidence.
+    On LLM error, falls back to the reliability heuristic.
     """
     from research_agent.core.config import get_settings
 
@@ -165,8 +156,8 @@ def verify_results(
 
     Stops issuing new LLM calls once the budget is exceeded, falling back to the
     heuristic for the remaining claims so verification always completes.
-    `adversarial` (default: the ADVERSARIAL_VERIFY setting) adds a second pass
-    that tries to refute the strongest claims — extra cost, off by default.
+    `adversarial` (default: the ADVERSARIAL_VERIFY setting) adds a refutation
+    pass on strong claims (extra cost, off by default).
     """
     verified = 0
     supported = 0
@@ -215,23 +206,20 @@ def verify_results(
 
 
 # --- Consolidation ----------------------------------------------------------
-# After per-claim verification: merge near-duplicate findings so the
-# synthesizer sees less noise, then flag findings that agree on the topic but
-# disagree on the numbers across sub-tasks. Both are deterministic (no LLM)
-# and feed the report's transparency fields through contradiction_note.
+# Merge near-duplicate claims, then flag claims that agree on the topic but
+# disagree on the numbers. Both are deterministic (no LLM); flags flow into
+# the report through contradiction_note.
 
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 _NUM_RE = re.compile(r"-?\d+(?:[.,]\d+)?")
 
 # Near-identical wording -> same finding.
 _DEDUP_JACCARD = 0.8
-# Same topic, different numbers -> contradiction candidate. Kept conservative:
-# a false flag only adds a visible note, a missed one hides a real conflict.
+# Same topic, different numbers -> contradiction candidate.
 _CONTRA_TOPIC_JACCARD = 0.3
 _MAX_CROSS_FACTS = 100
 
-# Adversarial second pass: only strong claims, and never more than a handful —
-# every check is an extra LLM call.
+# Adversarial pass: strong claims only, capped; each check costs an LLM call.
 _ADVERSARIAL_MIN_CONFIDENCE = 0.6
 _ADVERSARIAL_MAX_CLAIMS = 5
 
@@ -271,8 +259,7 @@ def dedupe_claims(results: list[SubTaskResult]) -> list[SubTaskResult]:
 
     Deterministic token-Jaccard grouping (no LLM). The survivor takes the
     higher confidence and its supported verdict, the union of supporting
-    sources, and any contradiction note — grounding is never lost, only
-    de-duplicated. Mutates the results in place and returns them.
+    sources, and any contradiction note. Mutates in place and returns.
     """
     kept: list[Claim] = []
     kept_tokens: list[set[str]] = []
@@ -325,8 +312,7 @@ def find_cross_contradictions(
 ) -> list[tuple[Claim, Claim]]:
     """Supported claims about the same topic that give different numbers.
 
-    Deterministic and cheap by design — this pass runs on every request, so it
-    must not cost LLM calls. Capped to keep the pairwise scan bounded.
+    Deterministic, no LLM. Capped to keep the pairwise scan bounded.
     """
     facts: list[tuple[Claim, set[str], frozenset[str]]] = []
     for result in results:
@@ -353,8 +339,7 @@ def find_cross_contradictions(
 def flag_cross_contradictions(results: list[SubTaskResult]) -> int:
     """Mark conflicting pairs so the synthesis transparency pass surfaces them.
 
-    Both sides get a note quoting the other finding — the report shows the
-    disagreement rather than picking a winner. Returns the number of pairs.
+    Both sides get a note quoting the other finding. Returns the pair count.
     """
     pairs = find_cross_contradictions(results)
     for claim_a, claim_b in pairs:
@@ -383,9 +368,9 @@ def adversarial_pass(
 ) -> int:
     """Second opinion on the strongest claims: ask the model to refute them.
 
-    A refuted claim is retracted — unsupported, zero confidence, and the reason
-    surfaces as a contradiction note. A failed check call changes nothing (the
-    claim stands); a budget hit ends the pass early. Returns refuted count.
+    A refuted claim is retracted: unsupported, zero confidence, reason kept as
+    a contradiction note. If the check call fails the claim stands. A budget
+    hit ends the pass early. Returns the refuted count.
     """
     from research_agent.core.config import get_settings
 
@@ -433,7 +418,7 @@ def adversarial_pass(
                     tracker=tracker,
                 )
             except LLMError:
-                continue  # an unavailable attacker changes nothing — claim stands
+                continue  # judge unavailable: claim stands
             checked += 1
             if isinstance(data, dict) and data.get("refuted") is True:
                 reason = str(data.get("reason", "")).strip() or "refuted on review"

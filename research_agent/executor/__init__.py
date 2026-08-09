@@ -1,1 +1,1 @@
-"""executor layer — implemented per roadmap."""
+"""Sub-task execution and tools."""
