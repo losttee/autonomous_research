@@ -1,6 +1,6 @@
 # Autonomous Research & Decision Agent
 
-A multi-layer deep-research agent. Given a question, it autonomously **plans** the work, **gathers** evidence from multiple sources, **verifies** each claim against those sources, and **synthesizes** a cited report with explicit confidence levels. Every assertion is traceable back to a source — no source, no claim.
+A multi-layer deep-research agent. Given a question, it autonomously **plans** the work, **gathers** evidence from multiple sources, **verifies** each claim against those sources, and **synthesizes** a cited report with explicit confidence levels. Every assertion is traceable back to a source: no source, no claim.
 
 ## Overview
 
@@ -17,7 +17,7 @@ Executor      Run each sub-task with tools (web search, ...) and return
    │           distilled claims plus their supporting sources.
    ▼
 Verifier      Check each claim for grounding, attach a confidence score,
-   │           merge duplicate findings, and surface contradictions —
+   │           merge duplicate findings, and surface contradictions,
    │           between sources and across sub-tasks.
    ▼
 Synthesizer   Produce the final report: recommendation, cited analysis,
@@ -28,16 +28,16 @@ FinalReport (JSON)
 
 Two concerns cut across the whole pipeline:
 
-- **Guardrail** (`guardrail/cost_tracker.py`) — enforces hard per-request limits on LLM calls, tool calls, tokens, spend, and wall-clock time to prevent runaway cost.
-- **Memory** (`memory/`) — working memory and vector store, used by later stages for retrieval and recall.
+- **Guardrail** (`guardrail/cost_tracker.py`): enforces hard per-request limits on LLM calls, tool calls, tokens, spend, and wall-clock time to prevent runaway cost.
+- **Memory** (`memory/`): working memory and vector store, used by later stages for retrieval and recall.
 
 The planner assigns one tool per sub-task (`web`, `calculator`, or `documents`)
 and the executor dispatches on that hint:
 
-- **Calculator** — the LLM only extracts the arithmetic expression; the math runs
+- **Calculator**: the LLM only extracts the arithmetic expression; the math runs
   through a restricted AST evaluator, so computed numbers are exact and cited as
   `CALCULATOR` sources (reliability 1.0).
-- **Documents** — keyword search over `DOCUMENT_ROOT` (markdown/text/JSON/CSV),
+- **Documents**: keyword search over `DOCUMENT_ROOT` (markdown/text/JSON/CSV),
   surfaced as `INTERNAL_RAG` sources so internal files are cited like web pages.
 
 ## Project layout
@@ -129,7 +129,7 @@ Model tiers (`PLANNER_MODEL`, `WORKER_MODEL`, `VERIFIER_MODEL`) let you assign a
 ## Evaluation
 
 `evaluation/` measures what the pipeline promises: citations that resolve,
-grounded claims, honest uncertainty, and per-question cost — over a golden set
+grounded claims, honest uncertainty, and per-question cost, over a golden set
 of factual, open-ended, and deliberately unanswerable questions.
 
 ```powershell
@@ -145,7 +145,19 @@ of factual, open-ended, and deliberately unanswerable questions.
 
 Each run writes `evaluation/results/<timestamp>.json`. Keyword-recall and
 honesty metrics are only meaningful with a real search backend
-(`TAVILY_API_KEY`) — the offline stub cannot produce real facts.
+(`TAVILY_API_KEY`); the offline stub cannot produce real facts.
+
+### Baseline (2026-09-05, Tavily backend, gpt-4o roles)
+
+| Metric | Result |
+|---|---|
+| Citation integrity | 12/12 |
+| Honesty on unanswerable questions | 3/3 |
+| Avg grounding precision (independent LLM judge) | 1.00 |
+| Full keyword recall (factual) | 4/6 |
+| Total cost | $0.295 (~$0.025/question) |
+
+Raw run: `evaluation/results/20260905_174639.json`.
 
 ## Monitoring
 
@@ -155,25 +167,41 @@ Every pipeline step writes one structured JSON line (`step_type`, `tokens`,
 browser for the dashboard (cost per layer, per-run history, budget-cap hits),
 or fetch **/metrics** for the raw JSON.
 
-The web UI streams progress over SSE on **/research/stream** — the question
+The web UI streams progress over SSE on **/research/stream**: the question
 page shows each stage (planning → gathering → verifying → synthesizing) live
 instead of a blank wait, and falls back to the classic endpoint automatically.
 
 ## Benchmark
 
 `evaluation/benchmark.py` quantifies what the grounding machinery buys: every
-golden question runs through the pipeline **twice** — verifier on vs. verifier
-off (`run_research(..., verify_claims=False)`), everything else identical —
+golden question runs through the pipeline **twice** (verifier on vs. verifier
+off (`run_research(..., verify_claims=False)`), everything else identical)
 and both reports are scored with the eval metrics. The headline number is the
 **grounding-precision delta**: how much more often an independent LLM judge
 confirms that claims are really supported by their snippets.
 
 ```powershell
-# COST: two real pipeline runs per question — keep --limit small while exploring
+# COST: two real pipeline runs per question; keep --limit small while exploring
 .venv\Scripts\python.exe -m evaluation.benchmark --limit 3
 ```
 
 Results land in `evaluation/results/benchmark_<timestamp>.json`.
+
+### First run (2026-09-05, 3 factual questions)
+
+| | Verifier on | Verifier off |
+|---|---|---|
+| Grounding precision | 1.00 | 1.00 |
+| Avg confidence | 0.78 | 0.00 |
+| Total cost | $0.0287 | $0.0192 |
+
+Honest reading: on easy factual questions with clean search snippets,
+unverified claims are trivially grounded too, so precision ties. What the
+verifier measurably buys here is calibrated confidence (0.00 -> ~0.78) plus
+contradiction detection, for ~$0.003 per question. A precision gap needs
+harder questions (weak or conflicting sources).
+
+Raw run: `evaluation/results/benchmark_20260905_175034.json`.
 
 ## Testing
 

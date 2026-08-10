@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -130,6 +131,8 @@ def _summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description="Verifier on/off benchmark.")
     parser.add_argument("--limit", type=int, default=None,
                         help="benchmark only the first N eligible questions")

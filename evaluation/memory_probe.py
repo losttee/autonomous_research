@@ -43,6 +43,8 @@ def analyze(store: VectorStore, recall_threshold: float) -> dict[str, Any]:
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     settings = get_settings()
     store_obj = get_memory_store()
     store = getattr(store_obj, "vector_store", None)

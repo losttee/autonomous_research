@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -121,6 +122,8 @@ def _summarize(results: list[dict], backend: str) -> dict:
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description="Run the golden-set evaluation.")
     parser.add_argument("--limit", type=int, default=None,
                         help="evaluate only the first N questions")
